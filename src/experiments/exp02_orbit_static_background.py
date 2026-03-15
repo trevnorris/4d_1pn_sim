@@ -11,10 +11,15 @@ from src.core.checkpoints import load_checkpoint, save_checkpoint
 from src.core.config import load_json_config
 from src.core.io import collect_runtime_info, dump_json, ensure_dir
 from src.core.targets import load_reference_targets
-from src.experiments.common import build_solver, clone_state, serializable_diag
+from src.experiments.common import build_solver, prepare_relaxed_state, serializable_diag
 from src.physics.background_sources import StaticCentralBackground
-from src.physics.defects import displace_and_boost_state, gaussian_initial_modes, imaginary_time_relax
+from src.physics.defects import displace_and_boost_state
 from src.physics.diagnostics import snapshot_diagnostics, summarize_orbit_run
+from src.physics.launch_calibration import (
+    probe_launch_response,
+    safe_launch_speed_limit,
+    summarize_launch_calibration,
+)
 from src.physics.observables import orbital_radius
 from src.physics.matter_gnls import MatterState
 
@@ -35,6 +40,8 @@ def run(config_path: str | Path, restart: str | None = None) -> Path:
     background_potential = background.potential_field(solver.grid).to(solver.grid.real_dtype)
     source_center = torch.tensor(background.center, device=solver.grid.device, dtype=solver.grid.real_dtype)
 
+    launch_calibration_summary: dict[str, Any] | None = None
+
     if restart is not None:
         checkpoint_state = load_checkpoint(restart, device=solver.grid.device, complex_dtype=solver.complex_dtype)
         state = MatterState(
@@ -45,19 +52,7 @@ def run(config_path: str | Path, restart: str | None = None) -> Path:
             rho_ambient=float(checkpoint_state["rho_ambient"]),
         )
     else:
-        state = gaussian_initial_modes(
-            solver=solver,
-            gaussian_width=config["initializer"]["gaussian_width"],
-            target_norm=config["initializer"]["target_norm"],
-            rho_ambient=rho0,
-        )
-        state = imaginary_time_relax(
-            solver=solver,
-            state=state,
-            dtau=config["initializer"]["imaginary_dt"],
-            steps=config["initializer"]["steps"],
-            target_norm=config["initializer"]["target_norm"],
-        )
+        state = prepare_relaxed_state(solver=solver, config=config, rho_ambient=rho0)
         save_checkpoint(
             output_dir / "checkpoint_relaxed.npz",
             {
@@ -70,9 +65,67 @@ def run(config_path: str | Path, restart: str | None = None) -> Path:
         )
         periapsis_radius = float(config["experiment"]["periapsis_radius"])
         eccentricity = float(config["experiment"]["eccentricity"])
-        initial_speed = background.periapsis_speed(periapsis_radius, eccentricity) * float(
-            config["experiment"].get("velocity_scale", 1.0)
-        )
+        initial_speed = background.periapsis_speed(periapsis_radius, eccentricity) * float(config["experiment"].get("velocity_scale", 1.0))
+        calibration_config = dict(config.get("launch_calibration", {}))
+        if bool(calibration_config.get("enabled", False)):
+            probe_steps = int(calibration_config.get("probe_steps", 160))
+            measure_start_step = int(calibration_config.get("measure_start_step", 8))
+            measure_end_step = calibration_config.get("measure_end_step")
+            measure_end_step = int(measure_end_step) if measure_end_step is not None else None
+            safe_fraction = float(calibration_config.get("safe_nyquist_fraction", 0.65))
+            safe_speed = safe_launch_speed_limit(solver, nyquist_fraction=safe_fraction)
+            boundary_clearance_floor = 3.0 * max(float(dx) for dx in solver.grid.dx)
+            base_speed = background.periapsis_speed(periapsis_radius, eccentricity)
+            configured_scales = calibration_config.get("velocity_scale_samples")
+            if configured_scales:
+                sampled_scales = [float(value) for value in configured_scales if float(value) > 0.0]
+            else:
+                safe_scale_limit = safe_speed / max(base_speed, 1.0e-12)
+                sampled_scales = np.linspace(0.5, max(min(1.25, safe_scale_limit), 0.4), 6, dtype=np.float64).tolist()
+
+            calibration_probes = []
+            for velocity_scale in sampled_scales:
+                applied_speed = base_speed * velocity_scale
+                if applied_speed > safe_speed:
+                    continue
+                probe = probe_launch_response(
+                    solver=solver,
+                    state=state,
+                    applied_speed=applied_speed,
+                    shift=(periapsis_radius, 0.0, 0.0),
+                    dt=float(config["solver"]["dt"]),
+                    steps=probe_steps,
+                    source_center=background.center,
+                    rho_reference=rho0,
+                    external_potential=background_potential,
+                    ambient_density_fn=None,
+                    measure_start_step=measure_start_step,
+                    measure_end_step=measure_end_step,
+                )
+                probe["velocity_scale"] = float(velocity_scale)
+                calibration_probes.append(probe)
+
+            if calibration_probes:
+                launch_calibration_summary = summarize_launch_calibration(
+                    probes=calibration_probes,
+                    target_speed=initial_speed,
+                    safe_speed_limit=safe_speed,
+                    boundary_clearance_floor=boundary_clearance_floor,
+                )
+                launch_calibration_summary.update(
+                    {
+                        "scenario": "source_no_dressing",
+                        "base_periapsis_speed": float(base_speed),
+                        "target_velocity_scale": float(config["experiment"].get("velocity_scale", 1.0)),
+                        "safe_nyquist_fraction": safe_fraction,
+                        "boundary_clearance_floor": float(boundary_clearance_floor),
+                        "probe_steps": probe_steps,
+                        "measure_start_step": measure_start_step,
+                        "measure_end_step": measure_end_step,
+                    }
+                )
+                dump_json(output_dir / "launch_calibration.json", launch_calibration_summary)
+                initial_speed = float(launch_calibration_summary["recommended_applied_speed"])
         initial_momentum = (
             0.0,
             solver.mass * initial_speed,
@@ -225,6 +278,7 @@ def run(config_path: str | Path, restart: str | None = None) -> Path:
         },
         "orbit_summary": orbit_summary,
         "final_snapshot": orbit_log[-1],
+        "launch_calibration": launch_calibration_summary,
         "assumptions": [
             "The heavy source is represented by an imposed static background potential.",
             "The defect internal confinement is carried with the instantaneous defect center as a reduced COM/internal split surrogate.",
@@ -257,6 +311,13 @@ def run(config_path: str | Path, restart: str | None = None) -> Path:
             f"- Available fit-window diagnostics: coherence = {orbit_summary['mean_fit_coherence']:.4f}, higher-mode fraction = {orbit_summary['mean_fit_higher_mode_fraction']:.4e}, leakage = {orbit_summary['mean_fit_leakage']:.4e}.",
             "- This run did not produce a usable periapsis sequence for beta_eff extraction.",
         ]
+    if launch_calibration_summary is not None:
+        plain_language.append(
+            f"- Launch calibration used applied speed {launch_calibration_summary['recommended_applied_speed']:.4f} "
+            f"for realized tangential speed {launch_calibration_summary['recommended_realized_tangential_speed']:.4f} "
+            f"(target reachable: {launch_calibration_summary['target_reachable']}, "
+            f"window usable: {launch_calibration_summary['recommended_window_usable']})."
+        )
     (output_dir / "plain_language_summary.txt").write_text("\n".join(plain_language) + "\n", encoding="utf-8")
     (output_dir / "unresolved_assumptions.txt").write_text("\n".join(summary["assumptions"]) + "\n", encoding="utf-8")
     return output_dir

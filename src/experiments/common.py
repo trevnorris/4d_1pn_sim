@@ -7,6 +7,7 @@ import torch
 from src.core.grids import SpatialGrid3D, resolve_device
 from src.core.hermite import HermiteBasis
 from src.core.projection import ProjectionKernel
+from src.physics.defects import gaussian_initial_modes, imaginary_time_relax
 from src.physics.eos import PolytropicEOS
 from src.physics.geometry import AdiabaticGeometryClosure
 from src.physics.matter_gnls import MatterSplitStepSolver, MatterState
@@ -82,4 +83,24 @@ def clone_state(state: MatterState) -> MatterState:
         step=int(state.step),
         a=float(state.a),
         rho_ambient=float(state.rho_ambient),
+    )
+
+
+def prepare_relaxed_state(
+    solver: MatterSplitStepSolver,
+    config: dict[str, Any],
+    rho_ambient: float,
+) -> MatterState:
+    state = gaussian_initial_modes(
+        solver=solver,
+        gaussian_width=float(config["initializer"]["gaussian_width"]),
+        target_norm=float(config["initializer"]["target_norm"]),
+        rho_ambient=rho_ambient,
+    )
+    return imaginary_time_relax(
+        solver=solver,
+        state=state,
+        dtau=float(config["initializer"]["imaginary_dt"]),
+        steps=int(config["initializer"]["steps"]),
+        target_norm=float(config["initializer"]["target_norm"]),
     )

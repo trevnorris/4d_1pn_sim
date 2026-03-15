@@ -14,9 +14,14 @@ Purpose: turn the static-background orbit work into a staged discriminator rathe
   - displaced-rest null test passes cleanly
   - boosted free-translation still shows noticeable COM curvature over the audit window
   - source-present closure-on/off runs remain launch-sensitive and not yet clean-orbit-grade
-- Experiment 2 currently still has mixed-sign loose-gate `beta_eff` results, but those signs are not robust under stricter periapsis spacing gates.
+  - local-main launch calibration now shows a box-safe long-run candidate at `r_p = 16`, while the first speed-reachable point (`r_p = 18`) is boundary-contaminated on the current `40^3` physical box
+- After fitter hardening, the current saved Experiment 2 and audit trajectories no longer produce fit-worthy periapsis sets at all.
 - Leakage and higher-mode occupation are consistently small.
 - The bottleneck is now defect launch / COM control plus orbit-fit robustness, not raw resolution.
+- The promoted `r_p = 16` long control completed and failed by inward plunge rather than by marginal periapsis ambiguity.
+- The active next control is the wide-box fallback based on `configs/local/exp02_widebox_r18_long.json`.
+- A new pre-orbit gate is now active in practice:
+  static-background radial infall must show stable fall-rate convergence with increasing `N` before more orbit tuning is worth the wall time.
 
 ## Decision rule
 
@@ -144,4 +149,5 @@ Interpretation:
 - Reduced closure emulator: passes as a regression target.
 - Static-background orbit claim: unresolved and still fitter-limited.
 - Reason:
-  low leakage and low mode contamination persist across many runs, but `beta_eff` is unstable in sign and magnitude under launch choice, runtime, and periapsis-gating choices. That is still the regime where audit failures can masquerade as physics.
+  low leakage and low mode contamination persist across many runs, but the hardened fitter no longer accepts the current trajectories as having enough well-separated periapses. The launch sweep and the completed `r_p = 16` long control now show why: on the current `40^3` physical box, the box-safe launches are still sub-target enough to fall inward, while the first speed-reachable launches sit too close to the periodic boundary. The next physically meaningful branch is therefore the wider box, not more tuning on the current domain.
+  The first two radial-infall sweep points sharpen that further: `40^3` is underresolved and falls too fast, while `64^3` already matches the static infall oracle within about `3%`. So static-force diagnostics converge much earlier than orbit-quality runs, and orbit tuning should wait for the higher-resolution infall points before more wall time is spent there.

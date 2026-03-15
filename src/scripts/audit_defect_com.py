@@ -7,35 +7,14 @@ from typing import Any
 import numpy as np
 import torch
 
+from src.core.checkpoints import save_checkpoint
 from src.core.config import load_json_config
-from src.core.io import dump_json, ensure_dir
-from src.experiments.common import build_solver, serializable_diag
+from src.core.io import collect_runtime_info, dump_json, ensure_dir
+from src.experiments.common import build_solver, prepare_relaxed_state, serializable_diag
 from src.physics.background_sources import StaticCentralBackground
 from src.physics.com_audit import fit_ballistic_trajectory, fit_constant_acceleration_trajectory
-from src.physics.defects import displace_and_boost_state, gaussian_initial_modes, imaginary_time_relax
+from src.physics.defects import displace_and_boost_state
 from src.physics.diagnostics import snapshot_diagnostics, summarize_orbit_run
-
-
-def _scenario_state(
-    config: dict[str, Any],
-    background: StaticCentralBackground | None,
-    solver,
-):
-    rho0 = float(config["geometry"]["reference_rho"])
-    state = gaussian_initial_modes(
-        solver=solver,
-        gaussian_width=float(config["initializer"]["gaussian_width"]),
-        target_norm=float(config["initializer"]["target_norm"]),
-        rho_ambient=rho0,
-    )
-    state = imaginary_time_relax(
-        solver=solver,
-        state=state,
-        dtau=float(config["initializer"]["imaginary_dt"]),
-        steps=int(config["initializer"]["steps"]),
-        target_norm=float(config["initializer"]["target_norm"]),
-    )
-    return state
 
 
 def run_audit(
@@ -51,9 +30,11 @@ def run_audit(
     torch.manual_seed(seed)
 
     output_path = ensure_dir(output_dir, overwrite=True)
+    dump_json(output_path / "config.json", config)
+    dump_json(output_path / "runtime.json", collect_runtime_info(seed))
     solver, projection_kernel = build_solver(config)
     rho0 = float(config["geometry"]["reference_rho"])
-    state = _scenario_state(config=config, background=None, solver=solver)
+    state = prepare_relaxed_state(solver=solver, config=config, rho_ambient=rho0)
     reference_modes = state.psi_modes.clone()
 
     background: StaticCentralBackground | None = None
@@ -67,6 +48,7 @@ def run_audit(
     dt = float(config["solver"]["dt"])
     steps = int(steps_override if steps_override is not None else config["experiment"]["orbit_steps"])
     total_time = steps * dt
+    checkpoint_every = int(config["solver"].get("checkpoint_every", 0))
 
     displacement = (float(config["experiment"]["periapsis_radius"]), 0.0, 0.0)
     tangential_speed = 0.0
@@ -90,6 +72,16 @@ def run_audit(
         state=state,
         shift=displacement,
         momentum=(0.0, solver.mass * tangential_speed, 0.0),
+    )
+    save_checkpoint(
+        output_path / "checkpoint_inserted.npz",
+        {
+            "psi_modes": state.psi_modes,
+            "time": state.time,
+            "step": state.step,
+            "a": state.a,
+            "rho_ambient": state.rho_ambient,
+        },
     )
 
     trajectory_time: list[float] = []
@@ -136,6 +128,18 @@ def run_audit(
         coherence_history.append(float(diag["coherence"]))
         compactness_history.append(float(diag["radius_of_gyration"]))
         continuity_history.append(float(diag["continuity_residual_l2"]))
+
+        if checkpoint_every > 0 and state.step % checkpoint_every == 0:
+            save_checkpoint(
+                output_path / f"checkpoint_orbit_step_{state.step:05d}.npz",
+                {
+                    "psi_modes": state.psi_modes,
+                    "time": state.time,
+                    "step": state.step,
+                    "a": state.a,
+                    "rho_ambient": state.rho_ambient,
+                },
+            )
 
     time = np.asarray(trajectory_time, dtype=np.float64)
     positions = np.asarray(trajectory_position, dtype=np.float64)
@@ -191,6 +195,16 @@ def run_audit(
         summary["orbit_fit_error"] = orbit_fit_error
 
     dump_json(Path(output_path) / "summary.json", summary)
+    save_checkpoint(
+        output_path / "checkpoint_final.npz",
+        {
+            "psi_modes": state.psi_modes,
+            "time": state.time,
+            "step": state.step,
+            "a": state.a,
+            "rho_ambient": state.rho_ambient,
+        },
+    )
     np.savez_compressed(
         Path(output_path) / "timeseries.npz",
         time=time,
@@ -203,6 +217,26 @@ def run_audit(
         radius_of_gyration=np.asarray(compactness_history, dtype=np.float64),
         continuity_residual_l2=np.asarray(continuity_history, dtype=np.float64),
     )
+    plain_language = [
+        f"COM audit summary for scenario '{scenario}':",
+        f"- ballistic RMS residual = {summary['ballistic_fit']['rms_residual']:.6e}",
+        f"- fitted acceleration norm = {summary['constant_acceleration_fit']['acceleration_norm']:.6e}",
+        f"- mean coherence = {summary['mean_coherence']:.6f}",
+        f"- mean higher-mode fraction = {summary['mean_higher_mode_fraction']:.6e}",
+        f"- mean leakage = {summary['mean_leakage']:.6e}",
+    ]
+    if orbit_summary is not None:
+        plain_language.append(f"- beta_eff = {orbit_summary['beta_eff']:.6f}")
+        plain_language.append(f"- Delta phi = {orbit_summary['delta_phi']:.6f}")
+    elif orbit_fit_error is not None:
+        plain_language.append(f"- orbit fit failed: {orbit_fit_error}")
+    (output_path / "plain_language_summary.txt").write_text("\n".join(plain_language) + "\n", encoding="utf-8")
+    assumptions = [
+        "The defect is represented by the reduced matter-only split-step solver with co-moving internal confinement.",
+        "The audit omits live Maxwell, free-heavy recoil, and isolated Poisson boundary handling.",
+        "Source-present audits use the imposed static background from the supplied experiment config.",
+    ]
+    (output_path / "unresolved_assumptions.txt").write_text("\n".join(assumptions) + "\n", encoding="utf-8")
     return Path(output_path)
 
 

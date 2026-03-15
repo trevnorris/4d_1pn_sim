@@ -1,19 +1,19 @@
 {
-  "run_name": "exp02_debug",
+  "run_name": "exp02_local_r16_long",
   "seed": 1234,
-  "device": "cpu",
+  "device": "cuda_if_available",
   "dtype": "float32",
   "complex_dtype": "complex64",
-  "output_dir": "outputs/runs/exp02_debug",
+  "output_dir": "outputs/runs/exp02_local_r16_long",
   "overwrite_output": true,
   "grid": {
-    "shape": [24, 24, 24],
-    "length": [32.0, 32.0, 32.0]
+    "shape": [32, 32, 32],
+    "length": [40.0, 40.0, 40.0]
   },
   "hermite": {
     "num_modes": 4,
     "lambda_w": 1.25,
-    "quadrature_order": 16
+    "quadrature_order": 20
   },
   "eos": {
     "K_eos": 0.08,
@@ -31,12 +31,12 @@
     "transverse_prefactor": 0.2,
     "trap_strength_r": 1.4,
     "trap_strength_w": 0.9,
-    "dt": 0.02,
-    "checkpoint_every": 250
+    "dt": 0.015,
+    "checkpoint_every": 2000
   },
   "initializer": {
-    "imaginary_dt": 0.01,
-    "steps": 200,
+    "imaginary_dt": 0.008,
+    "steps": 320,
     "target_norm": 1.0,
     "gaussian_width": 1.1
   },
@@ -50,24 +50,24 @@
     "density_coupling": 1.0
   },
   "experiment": {
-    "periapsis_radius": 4.0,
+    "periapsis_radius": 16.0,
     "eccentricity": 0.15,
     "velocity_scale": 1.0,
-    "orbit_steps": 6400,
-    "fit_start_index": 400,
-    "turning_point_min_spacing": 280,
-    "turning_point_smooth_window": 11,
+    "orbit_steps": 60000,
+    "fit_start_index": 12000,
+    "turning_point_min_spacing": 420,
+    "turning_point_smooth_window": 15,
     "bound_radius_factor": 2.25,
-    "beta_tolerance": 0.75,
-    "higher_mode_threshold": 0.05,
-    "coherence_threshold": 0.97
+    "beta_tolerance": 0.5,
+    "higher_mode_threshold": 0.01,
+    "coherence_threshold": 0.8
   },
   "launch_calibration": {
     "enabled": true,
     "scenario": "source_no_dressing",
-    "probe_steps": 192,
-    "measure_start_step": 8,
-    "measure_end_step": 64,
+    "probe_steps": 256,
+    "measure_start_step": 12,
+    "measure_end_step": 96,
     "safe_nyquist_fraction": 0.65,
     "velocity_scale_samples": [0.6, 0.75, 0.9, 1.0, 1.05, 1.1, 1.15]
   }

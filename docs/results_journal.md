@@ -409,3 +409,254 @@ Interpretation:
   - the background protocol is fixed,
   - the defect launch / COM response is only partially controlled,
   - and the current Experiment 2 perihelion extraction is still fitter-limited rather than evidence-limited.
+
+### Run 013: Periapsis fitter hardening and reclassification of saved orbit runs
+
+- Code changes:
+  - period-aware turning-point spacing in [src/physics/fitting.py](/projects/4d_1pn_sim/src/physics/fitting.py)
+  - prominence gating for periapsis / apoapsis candidates in [src/physics/fitting.py](/projects/4d_1pn_sim/src/physics/fitting.py)
+  - stable-suffix selection for late-window fitting in [src/physics/fitting.py](/projects/4d_1pn_sim/src/physics/fitting.py)
+  - orbit-summary debug fields in [src/physics/diagnostics.py](/projects/4d_1pn_sim/src/physics/diagnostics.py)
+- Test commands:
+  - `pytest -q tests/test_orbit_fitter.py tests/test_orbit_oracles.py`
+  - `pytest -q`
+
+Key results:
+
+- all fitter/oracle tests pass after the hardening changes
+- previously ambiguous saved runs now all fail cleanly under the hardened fitter:
+  - `outputs/runs/exp02_debug`
+  - `outputs/runs/audit_defect_source_no_dressing_v155`
+  - `outputs/runs/audit_defect_source_with_dressing_v155`
+  - `outputs/runs/audit_defect_source_no_dressing_v155_long`
+  - `outputs/runs/audit_defect_source_with_dressing_v155_long`
+- common failure mode:
+  - `Need at least three periapses to fit precession`
+
+Interpretation:
+
+- This is an improvement, not a regression.
+- The old fitter was willing to assign a sign from clustered or weak turning points.
+- The hardened fitter now classifies the current Experiment 2 archive honestly: there is not yet a fit-worthy static-background orbit window.
+- That means the next runtime spend should go into obtaining trajectories that survive the stricter gates, not into interpreting loose-fit `beta_eff` values.
+
+### Run 014: Local-main launch-calibration sweep to larger periapsis radii
+
+- Commands:
+  - `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.calibrate_defect_launch --config configs/local/exp02_local_main.json --output-dir outputs/runs/calibrate_exp02_local_main`
+  - `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.calibrate_defect_launch --config configs/local/exp02_local_main.json --output-dir outputs/runs/calibrate_local_main_r8 --periapsis-radius 8`
+  - `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.calibrate_defect_launch --config configs/local/exp02_local_main.json --output-dir outputs/runs/calibrate_local_main_r10 --periapsis-radius 10`
+  - `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.calibrate_defect_launch --config configs/local/exp02_local_main.json --output-dir outputs/runs/calibrate_local_main_r12 --periapsis-radius 12`
+  - `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.calibrate_defect_launch --config configs/local/exp02_local_main.json --output-dir outputs/runs/calibrate_local_main_r14 --periapsis-radius 14`
+  - `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.calibrate_defect_launch --config configs/local/exp02_local_main.json --output-dir outputs/runs/calibrate_local_main_r16 --periapsis-radius 16`
+  - `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.calibrate_defect_launch --config configs/local/exp02_local_main.json --output-dir outputs/runs/calibrate_local_main_r17 --periapsis-radius 17`
+  - `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.calibrate_defect_launch --config configs/local/exp02_local_main.json --output-dir outputs/runs/calibrate_local_main_r18 --periapsis-radius 18`
+- Output directories:
+  - `outputs/runs/calibrate_exp02_local_main`
+  - `outputs/runs/calibrate_local_main_r8`
+  - `outputs/runs/calibrate_local_main_r10`
+  - `outputs/runs/calibrate_local_main_r12`
+  - `outputs/runs/calibrate_local_main_r14`
+  - `outputs/runs/calibrate_local_main_r16`
+  - `outputs/runs/calibrate_local_main_r17`
+  - `outputs/runs/calibrate_local_main_r18`
+
+Selected results:
+
+- baseline `r_p = 4`
+  - target speed `= 1.3133925536563698`
+  - realized tangential speed `= 0.8269290529284465`
+  - `target_reachable = false`
+- `r_p = 14`
+  - target speed `= 0.7020378500174638`
+  - realized tangential speed `= 0.6686798667896335`
+  - `target_reachable = false`
+- `r_p = 16`
+  - target speed `= 0.6566962768281849`
+  - recommended applied speed `= 0.7552007183524125`
+  - realized tangential speed `= 0.633203377402792`
+  - mean radius over the measurement window `= 16.002291872447817`
+  - mean radial speed `= 0.017366868887643584`
+  - estimated steps per orbit `= 13965.75984099152`
+  - `target_reachable = false`
+- `r_p = 17`
+  - target speed `= 0.6370889678382262`
+  - recommended applied speed `= 0.73265231301396`
+  - realized tangential speed `= 0.6196096757402263`
+  - mean radius over the measurement window `= 16.929276690245146`
+  - mean radial speed `= -0.038246520241977826`
+  - estimated steps per orbit `= 15295.299225454604`
+  - `target_reachable = false`
+- `r_p = 18`
+  - target speed `= 0.6191391873668903`
+  - recommended applied speed `= 0.7120100654719238`
+  - realized tangential speed `= 0.6211452541510699`
+  - mean radius over the measurement window `= 17.31639465492783`
+  - mean radial speed `= -0.46589301605375333`
+  - estimated steps per orbit `= 16664.540885979517`
+  - `target_reachable = true`
+
+Interpretation:
+
+- The local-main launch response saturates well below the point-particle target at small radius, so the original `r_p = 4` configuration cannot produce a clean Experiment 2 orbit.
+- The first speed-reachable point is around `r_p = 18`, but that operating point is already too close to the periodic box edge to trust:
+  - the measured mean radius collapses from `18` to about `17.32`,
+  - and the mean radial drift becomes large and negative over the short calibration window.
+- `r_p = 16` is the best current compromise on the existing `40^3` physical box:
+  - it stays centered at the requested radius,
+  - keeps radial drift small,
+  - and remains only about `3.6%` below the target tangential speed.
+- A dedicated long-run config has therefore been promoted at `configs/local/exp02_local_r16_long.json`.
+- The next decisive runtime spend is a long `source_no_dressing` control at `r_p = 16`, followed by the dressed Experiment 2 run only if the no-dressing orbit survives the hardened periapsis gate.
+
+### Run 015: Long no-dressing control at `r_p = 16` on the local-main box
+
+- Command:
+  `env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m src.scripts.audit_defect_com --config configs/local/exp02_local_r16_long.json --output-dir outputs/runs/audit_defect_source_no_dressing_r16_long --scenario source_no_dressing --steps 60000 --velocity-scale 1.15`
+- Output directory:
+  `outputs/runs/audit_defect_source_no_dressing_r16_long`
+
+Key results:
+
+- orbit fit failed with `Need at least three periapses to fit precession`
+- ballistic RMS `= 2.6347205851957787`
+- fitted acceleration norm `= 7.105515381330618e-05`
+- mean coherence `= 0.9447685149591416`
+- mean higher-mode fraction `= 0.004954518637561705`
+- mean leakage `= 8.236142197298735e-08`
+- initial tangential speed `= 0.7552007183524125`
+- source-radius history:
+  - initial radius `= 15.993029226414462`
+  - final radius `= 1.4931112086467004`
+  - minimum radius `= 1.1361980692033382`
+  - maximum radius `= 16.115638275959583`
+  - detected periapses `= 0`
+  - detected apoapses `= 1`
+
+Interpretation:
+
+- This is not a near-miss orbit and not a fitter artifact.
+- The defect plunges inward from the intended `r_p = 16` launch radius to a tight `r ~ 1.5` state without ever forming a repeatable periapsis sequence.
+- The clean coherence, leakage, and higher-mode metrics mean the failure is orbital rather than defect-breakup-driven.
+- In practical terms, the current `40^3` physical box still cannot realize a correct large-radius periapsis launch for Experiment 2:
+  - the box-safe `r_p = 16` point remains sub-target in realized tangential speed,
+  - and that shortfall is enough to miss the intended orbit entirely.
+- This closes the small-box branch for now.
+- The correct next step is the prepared wide-box fallback at `48^3` cells over a `60^3` physical domain, centered on the first speed-reachable radius near `r_p = 18`.
+
+### Run 016: Static-background radial infall resolution sweep on CPU
+
+- Command:
+  `python -m src.scripts.sweep_static_infall_resolution --config configs/local/infall_resolution_sweep_cpu.json`
+- Output directory:
+  `outputs/runs/infall_resolution_sweep_cpu`
+- Current status:
+  in progress
+
+Purpose:
+
+- Replace orbit-first tuning with a cheaper static-background radial-infall convergence study.
+- Sweep `N = 40, 64, 96, 128, 256` on a fixed `48^3` physical domain.
+- Use the `source_no_dressing` branch first to determine how many cells are needed before the COM fall rate itself is numerically reliable.
+
+Completed points so far:
+
+- `N = 40`
+  - `dx = 1.2`
+  - intrinsic initial compactness `= 1.2955085039138794`
+  - intrinsic compactness in cells `= 1.079590419928233`
+  - `r0 / Rg = 12.338848087874714`
+  - initial radial-acceleration ratio to Newtonian oracle `= 2.3766770303121705`
+  - `t(0.75 r0) / t_oracle = 0.8022615911479354`
+  - `t(0.50 r0)` not reached within the `2200`-step window
+  - pre-target coherence `= 0.9943825293671001`
+  - pre-target higher-mode fraction `= 0.004742469989736988`
+  - pre-target leakage `= 2.9102908958868315e-08`
+- `N = 64`
+  - `dx = 0.75`
+  - intrinsic initial compactness `= 1.1854418516159058`
+  - intrinsic compactness in cells `= 1.5805891354878743`
+  - `r0 / Rg = 13.497077041941004`
+  - initial radial-acceleration ratio to Newtonian oracle `= 0.995479263257565`
+  - `t(0.75 r0) / t_oracle = 1.024586264857558`
+  - `t(0.50 r0) / t_oracle = 1.030389168167338`
+  - pre-target coherence `= 0.9999985741633995`
+  - pre-target higher-mode fraction `= 0.0048731213627273545`
+  - pre-target leakage `= 2.9393178276139396e-08`
+- `N = 96`
+  - `dx = 0.5`
+  - intrinsic initial compactness `= 1.1853885650634766`
+  - intrinsic compactness in cells `= 2.370777130126953`
+  - `r0 / Rg = 13.497688600691667`
+  - initial radial-acceleration ratio to Newtonian oracle `= 0.9971278091851951`
+  - `t(0.75 r0) / t_oracle = 1.0243053129570847`
+  - `t(0.50 r0) / t_oracle = 1.0301781111499861`
+  - pre-target coherence `= 0.99999873035894`
+  - pre-target higher-mode fraction `= 0.004872948713435041`
+  - pre-target leakage `= 2.9408555607089695e-08`
+- `N = 128`
+  - `dx = 0.375`
+  - intrinsic initial compactness `= 1.1853886842727661`
+  - intrinsic compactness in cells `= 3.161036491394043`
+  - `r0 / Rg = 13.497690461391239`
+  - initial radial-acceleration ratio to Newtonian oracle `= 0.9968174353332463`
+  - `t(0.75 r0) / t_oracle = 1.024319524557313`
+  - `t(0.50 r0) / t_oracle = 1.0301908872978893`
+  - pre-target coherence `= 0.9999987193589412`
+  - pre-target higher-mode fraction `= 0.004872959688166528`
+  - pre-target leakage `= 2.940799678579199e-08`
+- `N = 256`
+  - `dx = 0.1875`
+  - intrinsic initial compactness `= 1.1853893995285034`
+  - intrinsic compactness in cells `= 6.322076797485352`
+  - `r0 / Rg = 13.497682316982736`
+  - initial radial-acceleration ratio to Newtonian oracle `= 0.9968848413240142`
+  - `t(0.75 r0) / t_oracle = 1.02435718374884`
+  - `t(0.50 r0) / t_oracle = 1.030223632637699`
+  - pre-target coherence `= 0.9999987325247597`
+  - pre-target higher-mode fraction `= 0.004873979617710289`
+  - pre-target leakage `= 2.9394150579276773e-08`
+
+Interim interpretation:
+
+- The infall diagnostic is behaving exactly as hoped:
+  - `40^3` is clearly underresolved and falls too fast,
+  - `64^3` already reproduces the static Newtonian infall rate to about `3%`,
+  - `96^3` and `128^3` do not materially change that fall-rate answer.
+- `256^3` confirms that the fall-rate curve has already saturated; it mainly improves defect resolution in cell units.
+- That means radial infall converges much earlier than orbit-quality dynamics.
+- The defect is still only about `1.58` cells wide at `64^3`, so this should not be over-interpreted as an orbit-ready grid.
+- The current plateau from `64^3` through `128^3` implies that the infall-rate error is no longer the main grid-setting constraint.
+- The remaining grid-setting constraint for orbit work is defect resolution in cell units:
+  - about `1.58` cells at `64^3`,
+  - about `2.37` cells at `96^3`,
+  - about `3.16` cells at `128^3`,
+  - and expected to be a bit above `6` cells at `256^3` if the intrinsic physical compactness stays near `1.185`.
+- The current evidence supports a two-stage conclusion:
+  - `64^3` may already be enough for coarse static-force / infall diagnostics,
+  - orbit work should not start below `256^3` on the current physical setup, because that is the first completed point where the defect core is resolved by roughly `6` cells while the static force law is already converged.
+
+Force-law check on the completed infall traces:
+
+- For a static pure-Kepler background, the relevant quantity is the COM radial acceleration, which should scale like `-mu / r^2`.
+- Measured over the pre-target infall window, the completed runs give:
+  - `N = 40`: clearly wrong
+    - log-log slope of measured inward radial acceleration versus radius `≈ +0.055`
+    - initial acceleration ratio to the `1/r^2` oracle `≈ 2.38`
+  - `N = 64`: consistent with `1/r^2`
+    - log-log slope `≈ -1.958`
+    - initial acceleration ratio to the oracle `≈ 0.995`
+    - crossing times remain within about `3%` of the exact Newtonian free-fall solution
+  - `N = 96`: consistent with `1/r^2`
+    - log-log slope `≈ -1.954`
+    - initial acceleration ratio to the oracle `≈ 0.997`
+  - `N = 128`: consistent with `1/r^2`
+    - log-log slope `≈ -1.956`
+    - initial acceleration ratio to the oracle `≈ 0.997`
+  - `N = 256`: consistent with `1/r^2`
+    - log-log slope `≈ -1.957`
+    - initial acceleration ratio to the oracle `≈ 0.997`
+- Interpretation:
+  - the coarse `40^3` grid does not reproduce the intended static force law,
+  - from `64^3` upward the completed runs already follow the expected `1/r^2` acceleration law to good accuracy for this diagnostic,
+  - so the remaining reason to push toward `256^3` is defect resolution for future orbit work, not to repair the basic static fall law itself.

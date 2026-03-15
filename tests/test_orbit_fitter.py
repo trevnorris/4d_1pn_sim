@@ -40,3 +40,28 @@ def test_planar_orbit_shape_and_beta_eff_helpers() -> None:
     )
     expected = 0.06 * 24.0**2 * semi_major / (2.0 * math.pi * 6.0) * (1.0 - eccentricity**2)
     assert abs(beta_eff - expected) < 1.0e-12
+
+
+def test_orbit_fitter_rejects_early_false_periapse_clusters() -> None:
+    semi_major = 1.9
+    eccentricity = 0.22
+    precession = 0.028
+    theta = np.linspace(0.0, 20.0 * 2.0 * math.pi, 16000, endpoint=False)
+    reduced_angle = theta / (1.0 + precession / (2.0 * math.pi))
+    base_radius = semi_major * (1.0 - eccentricity**2) / (1.0 + eccentricity * np.cos(reduced_angle))
+    transient_wiggle = 0.02 * (theta < 4.0 * math.pi) * np.sin(11.0 * theta)
+    radius = base_radius * (1.0 + transient_wiggle)
+    positions = np.stack([radius * np.cos(theta), radius * np.sin(theta)], axis=1)
+    times = np.linspace(0.0, 20.0, theta.size, endpoint=False)
+
+    fit = fit_orbit_precession(
+        positions=positions,
+        times=times,
+        min_spacing=80,
+        smooth_window=9,
+    )
+
+    assert abs(fit["delta_phi"] - precession) < 1.0e-3
+    assert fit["periapse_times"][0] > 2.0
+    assert np.all(np.diff(fit["periapse_times"]) > 0.8)
+    assert len(fit["candidate_periapse_times"]) > len(fit["periapse_times"])

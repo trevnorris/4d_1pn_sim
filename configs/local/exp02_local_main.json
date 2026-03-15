@@ -61,5 +61,14 @@
     "beta_tolerance": 0.5,
     "higher_mode_threshold": 0.03,
     "coherence_threshold": 0.98
+  },
+  "launch_calibration": {
+    "enabled": true,
+    "scenario": "source_no_dressing",
+    "probe_steps": 256,
+    "measure_start_step": 12,
+    "measure_end_step": 96,
+    "safe_nyquist_fraction": 0.65,
+    "velocity_scale_samples": [0.6, 0.75, 0.9, 1.0, 1.05, 1.1, 1.15]
   }
 }

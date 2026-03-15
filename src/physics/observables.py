@@ -15,14 +15,16 @@ def center_of_mass(rho: torch.Tensor, grid: SpatialGrid3D) -> torch.Tensor:
 
 def radius_of_gyration(rho: torch.Tensor, grid: SpatialGrid3D) -> torch.Tensor:
     x, y, z = grid.coordinates()
-    radius_sq = x.square() + y.square() + z.square()
+    com = center_of_mass(rho, grid)
+    radius_sq = (x - com[0]).square() + (y - com[1]).square() + (z - com[2]).square()
     mass = rho.sum().clamp_min(1.0e-12) * grid.cell_volume
     return torch.sqrt((radius_sq * rho).sum() * grid.cell_volume / mass)
 
 
 def bound_mass_fraction(rho: torch.Tensor, grid: SpatialGrid3D, bound_radius: float) -> torch.Tensor:
     x, y, z = grid.coordinates()
-    mask = (x.square() + y.square() + z.square()) <= bound_radius**2
+    com = center_of_mass(rho, grid)
+    mask = ((x - com[0]).square() + (y - com[1]).square() + (z - com[2]).square()) <= bound_radius**2
     bound_mass = rho[mask].sum() * grid.cell_volume
     total_mass = rho.sum().clamp_min(1.0e-12) * grid.cell_volume
     return bound_mass / total_mass
