@@ -1,0 +1,18 @@
+{
+  "n": 5.0,
+  "kappa_add": 0.5,
+  "alpha_sq": 0.75,
+  "K_vec": 0.20264236728467555,
+  "kappa_PV": 1.5,
+  "energy_partition": {
+    "E_w": 11.0,
+    "E_f": 2.0,
+    "E_PV": 5.0
+  },
+  "dln_a_dln_rho": -0.890625,
+  "beta_1PN": 3.0,
+  "eih_cross_coefficients": {
+    "v_dot_v": -3.5,
+    "v_n_v_n": -0.5
+  }
+}
