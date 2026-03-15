@@ -6,7 +6,13 @@ import numpy as np
 import torch
 
 from src.core.projection import ProjectionKernel, projected_continuity_terms
-from src.physics.fitting import extract_effective_response, fit_loglog_slope
+from src.physics.fitting import (
+    estimate_beta_eff,
+    estimate_planar_orbit_shape,
+    extract_effective_response,
+    fit_loglog_slope,
+    fit_orbit_precession,
+)
 from src.physics.matter_gnls import MatterSplitStepSolver, MatterState
 from src.physics.observables import (
     bound_mass_fraction,
@@ -14,6 +20,7 @@ from src.physics.observables import (
     coherence,
     mode_occupations,
     radius_of_gyration,
+    translation_aligned_coherence,
 )
 
 
@@ -45,7 +52,9 @@ def snapshot_diagnostics(
         ),
         "mode_occupations": occupations.detach().cpu().numpy().tolist(),
         "higher_mode_fraction": higher_mode_fraction,
-        "coherence": float(coherence(reference_modes, state.psi_modes, solver.grid.cell_volume)),
+        "coherence": float(
+            translation_aligned_coherence(solver, reference_modes, state.psi_modes, solver.grid.cell_volume)
+        ),
     }
 
     closure = solver.geometry.closure_diagnostics(state.rho_ambient)
@@ -119,4 +128,66 @@ def summarize_drive_response(
         "Z_eff_real": float(np.real(z_eff)),
         "Z_eff_imag": float(np.imag(z_eff)),
         "Z_eff_abs": float(np.abs(z_eff)),
+    }
+
+
+def summarize_orbit_run(
+    time: np.ndarray,
+    positions: np.ndarray,
+    leakage: np.ndarray,
+    higher_mode_fraction: np.ndarray,
+    coherence_series: np.ndarray,
+    compactness: np.ndarray,
+    continuity_residual: np.ndarray,
+    mu: float,
+    c_eff: float,
+    fit_start_index: int = 0,
+    turning_point_min_spacing: int = 1,
+    turning_point_smooth_window: int = 1,
+) -> dict[str, Any]:
+    fit_slice = slice(int(fit_start_index), None)
+    fit_positions = np.asarray(positions, dtype=np.float64)[fit_slice]
+    fit_time = np.asarray(time, dtype=np.float64)[fit_slice]
+    if fit_positions.shape[0] < 16:
+        raise ValueError("Need at least 16 samples in the orbit fit window")
+
+    precession = fit_orbit_precession(
+        positions=fit_positions,
+        times=fit_time,
+        min_spacing=turning_point_min_spacing,
+        smooth_window=turning_point_smooth_window,
+    )
+    shape = estimate_planar_orbit_shape(
+        fit_positions,
+        min_spacing=turning_point_min_spacing,
+        smooth_window=turning_point_smooth_window,
+    )
+    beta_eff = estimate_beta_eff(
+        delta_phi=precession["delta_phi"],
+        semi_major_axis=shape["semi_major_axis"],
+        eccentricity=shape["eccentricity"],
+        mu=mu,
+        c_eff=c_eff,
+    )
+    radius = np.sqrt((fit_positions[:, 0] ** 2) + (fit_positions[:, 1] ** 2))
+    return {
+        "fit_start_index": int(fit_start_index),
+        "turning_point_min_spacing": int(turning_point_min_spacing),
+        "turning_point_smooth_window": int(turning_point_smooth_window),
+        "delta_phi": float(precession["delta_phi"]),
+        "delta_phi_stderr": float(precession["delta_phi_stderr"]),
+        "phase_increment": float(precession["phase_increment"]),
+        "periapse_times": precession["periapse_times"].tolist(),
+        "periapse_angles": precession["periapse_angles"].tolist(),
+        "beta_eff": float(beta_eff),
+        "semi_major_axis": shape["semi_major_axis"],
+        "eccentricity": shape["eccentricity"],
+        "periapsis_radius": shape["periapsis_radius"],
+        "apoapsis_radius": shape["apoapsis_radius"],
+        "mean_fit_radius": float(np.mean(radius)),
+        "mean_fit_leakage": float(np.mean(np.asarray(leakage, dtype=np.float64)[fit_slice])),
+        "mean_fit_higher_mode_fraction": float(np.mean(np.asarray(higher_mode_fraction, dtype=np.float64)[fit_slice])),
+        "mean_fit_coherence": float(np.mean(np.asarray(coherence_series, dtype=np.float64)[fit_slice])),
+        "mean_fit_compactness": float(np.mean(np.asarray(compactness, dtype=np.float64)[fit_slice])),
+        "mean_fit_continuity_residual": float(np.mean(np.asarray(continuity_residual, dtype=np.float64)[fit_slice])),
     }

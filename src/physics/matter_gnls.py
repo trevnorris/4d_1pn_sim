@@ -46,7 +46,8 @@ class MatterSplitStepSolver:
         self.trap_strength_r = trap_strength_r
         self.trap_strength_w = trap_strength_w
         self.k_squared = self.grid.k_squared().to(self.grid.real_dtype)
-        self.radial_squared = self.grid.radial_squared().to(self.grid.real_dtype)
+        self.x_grid, self.y_grid, self.z_grid = self.grid.coordinates()
+        self.radial_squared = (self.x_grid.square() + self.y_grid.square() + self.z_grid.square()).to(self.grid.real_dtype)
         self.w_squared = self.basis.nodes.square().view(-1, 1, 1, 1).to(self.grid.real_dtype)
         self.mode_masses_sq = self.basis.mode_masses_sq.view(-1, 1, 1, 1).to(self.grid.real_dtype)
 
@@ -68,15 +69,46 @@ class MatterSplitStepSolver:
     def project_nodes(self, psi_nodes: torch.Tensor) -> torch.Tensor:
         return self.basis.project(psi_nodes)
 
-    def confinement_potential(self, a_value: float) -> torch.Tensor:
+    def effective_spatial_density(self, psi_modes: torch.Tensor) -> torch.Tensor:
+        return psi_modes.abs().square().sum(dim=0)
+
+    def estimate_defect_center(self, psi_modes: torch.Tensor) -> torch.Tensor:
+        rho = self.effective_spatial_density(psi_modes)
+        mass = rho.sum().clamp_min(1.0e-12) * self.grid.cell_volume
+        center = torch.stack(
+            [
+                (self.x_grid * rho).sum() * self.grid.cell_volume / mass,
+                (self.y_grid * rho).sum() * self.grid.cell_volume / mass,
+                (self.z_grid * rho).sum() * self.grid.cell_volume / mass,
+            ],
+            dim=0,
+        )
+        return center
+
+    def confinement_potential(self, a_value: float, center: torch.Tensor | None = None) -> torch.Tensor:
         L_value = self.geometry.lambda_aspect * a_value
-        radial_term = 0.5 * self.trap_strength_r * self.radial_squared / (a_value**2)
+        if center is None:
+            radial_squared = self.radial_squared
+        else:
+            cx, cy, cz = center.to(self.grid.real_dtype)
+            radial_squared = (self.x_grid - cx).square() + (self.y_grid - cy).square() + (self.z_grid - cz).square()
+        radial_term = 0.5 * self.trap_strength_r * radial_squared / (a_value**2)
         transverse_term = 0.5 * self.trap_strength_w * self.w_squared / (L_value**2)
         return radial_term.unsqueeze(0) + transverse_term
 
-    def nonlinear_potential(self, psi_nodes: torch.Tensor, a_value: float, rho_ambient: float) -> torch.Tensor:
+    def nonlinear_potential(
+        self,
+        psi_nodes: torch.Tensor,
+        a_value: float,
+        rho_ambient: float,
+        external_potential: torch.Tensor | None = None,
+        confinement_center: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         local_density = psi_nodes.abs().square()
-        return self.confinement_potential(a_value) + self.eos.relative_enthalpy(local_density, rho_ambient)
+        potential = self.confinement_potential(a_value, center=confinement_center)
+        if external_potential is not None:
+            potential = potential + (external_potential.unsqueeze(0) if external_potential.ndim == 3 else external_potential)
+        return potential + self.eos.relative_enthalpy(local_density, rho_ambient)
 
     def linear_half_step(self, psi_modes: torch.Tensor, delta: complex | float) -> torch.Tensor:
         linear_operator = self.kinetic_prefactor * self.k_squared.unsqueeze(0) + self.transverse_prefactor * self.mode_masses_sq
@@ -85,24 +117,66 @@ class MatterSplitStepSolver:
         psi_fft = psi_fft * phase
         return ifft3(psi_fft)
 
-    def nonlinear_full_step(self, psi_modes: torch.Tensor, delta: complex | float, a_value: float, rho_ambient: float) -> torch.Tensor:
+    def nonlinear_full_step(
+        self,
+        psi_modes: torch.Tensor,
+        delta: complex | float,
+        a_value: float,
+        rho_ambient: float,
+        external_potential: torch.Tensor | None = None,
+        confinement_center: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         psi_nodes = self.reconstruct_nodes(psi_modes)
-        potential = self.nonlinear_potential(psi_nodes, a_value, rho_ambient)
+        potential = self.nonlinear_potential(
+            psi_nodes,
+            a_value,
+            rho_ambient,
+            external_potential=external_potential,
+            confinement_center=confinement_center,
+        )
         phase = torch.exp(torch.as_tensor(delta, device=psi_modes.device) * potential.to(self.complex_dtype))
         psi_nodes = psi_nodes * phase
         return self.project_nodes(psi_nodes)
 
-    def step(self, state: MatterState, dt: float, rho_ambient: float) -> MatterState:
+    def step(
+        self,
+        state: MatterState,
+        dt: float,
+        rho_ambient: float,
+        external_potential: torch.Tensor | None = None,
+    ) -> MatterState:
         a_value = self.geometry.equilibrium_a(rho_ambient, initial_guess=state.a)
+        confinement_center = self.estimate_defect_center(state.psi_modes)
         psi_half = self.linear_half_step(state.psi_modes, -0.5j * dt)
-        psi_full = self.nonlinear_full_step(psi_half, -1.0j * dt, a_value, rho_ambient)
+        psi_full = self.nonlinear_full_step(
+            psi_half,
+            -1.0j * dt,
+            a_value,
+            rho_ambient,
+            external_potential=external_potential,
+            confinement_center=confinement_center,
+        )
         psi_next = self.linear_half_step(psi_full, -0.5j * dt)
         return MatterState(psi_modes=psi_next, time=state.time + dt, step=state.step + 1, a=a_value, rho_ambient=rho_ambient)
 
-    def step_imaginary(self, state: MatterState, dtau: float, target_norm: float) -> MatterState:
+    def step_imaginary(
+        self,
+        state: MatterState,
+        dtau: float,
+        target_norm: float,
+        external_potential: torch.Tensor | None = None,
+    ) -> MatterState:
         a_value = self.geometry.equilibrium_a(state.rho_ambient, initial_guess=state.a)
+        confinement_center = self.estimate_defect_center(state.psi_modes)
         psi_half = self.linear_half_step(state.psi_modes, -0.5 * dtau)
-        psi_full = self.nonlinear_full_step(psi_half, -dtau, a_value, state.rho_ambient)
+        psi_full = self.nonlinear_full_step(
+            psi_half,
+            -dtau,
+            a_value,
+            state.rho_ambient,
+            external_potential=external_potential,
+            confinement_center=confinement_center,
+        )
         psi_next = self.linear_half_step(psi_full, -0.5 * dtau)
         psi_next = self.normalize_modes(psi_next, target_norm)
         return MatterState(psi_modes=psi_next, time=state.time, step=state.step + 1, a=a_value, rho_ambient=state.rho_ambient)
@@ -135,6 +209,7 @@ class MatterSplitStepSolver:
             "psi_nodes": currents["psi_nodes"],
             "current_xyz": currents["current_xyz"],
             "current_w": currents["current_w"],
+            "defect_center": self.estimate_defect_center(state.psi_modes),
             "time": state.time,
             "step": state.step,
             "a": state.a,

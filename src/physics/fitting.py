@@ -23,6 +23,57 @@ def fit_loglog_slope(x: np.ndarray, y: np.ndarray) -> dict[str, float]:
     }
 
 
+def _moving_average(values: np.ndarray, window: int) -> np.ndarray:
+    if window <= 1:
+        return values
+    kernel = np.ones(window, dtype=np.float64) / float(window)
+    return np.convolve(values, kernel, mode="same")
+
+
+def _cluster_extrema(
+    raw_indices: np.ndarray,
+    values: np.ndarray,
+    kind: str,
+    min_spacing: int,
+) -> np.ndarray:
+    if raw_indices.size == 0:
+        return raw_indices
+
+    clusters: list[list[int]] = [[int(raw_indices[0])]]
+    for idx in raw_indices[1:]:
+        if int(idx) - clusters[-1][-1] < min_spacing:
+            clusters[-1].append(int(idx))
+        else:
+            clusters.append([int(idx)])
+
+    selected = []
+    for cluster in clusters:
+        if kind == "min":
+            chosen = min(cluster, key=lambda i: values[i])
+        else:
+            chosen = max(cluster, key=lambda i: values[i])
+        selected.append(chosen)
+    return np.asarray(selected, dtype=np.int64)
+
+
+def find_turning_points(
+    radius: np.ndarray,
+    kind: str,
+    min_spacing: int = 1,
+    smooth_window: int = 1,
+) -> np.ndarray:
+    radius_array = np.asarray(radius, dtype=np.float64)
+    working = _moving_average(radius_array, smooth_window)
+    if kind == "min":
+        mask = (working[1:-1] < working[:-2]) & (working[1:-1] <= working[2:])
+    elif kind == "max":
+        mask = (working[1:-1] > working[:-2]) & (working[1:-1] >= working[2:])
+    else:
+        raise ValueError("kind must be 'min' or 'max'")
+    raw_indices = np.where(mask)[0] + 1
+    return _cluster_extrema(raw_indices, radius_array, kind=kind, min_spacing=max(int(min_spacing), 1))
+
+
 def lockin_amplitude(
     signal: np.ndarray,
     time: np.ndarray,
@@ -63,7 +114,12 @@ def extract_effective_response(
     }
 
 
-def fit_orbit_precession(positions: np.ndarray, times: np.ndarray) -> dict[str, Any]:
+def fit_orbit_precession(
+    positions: np.ndarray,
+    times: np.ndarray,
+    min_spacing: int = 1,
+    smooth_window: int = 1,
+) -> dict[str, Any]:
     coords = np.asarray(positions, dtype=np.float64)
     times_array = np.asarray(times, dtype=np.float64)
     if coords.ndim != 2 or coords.shape[1] < 2:
@@ -72,7 +128,7 @@ def fit_orbit_precession(positions: np.ndarray, times: np.ndarray) -> dict[str, 
     x = coords[:, 0]
     y = coords[:, 1]
     radius = np.sqrt(x**2 + y**2)
-    candidate_indices = np.where((radius[1:-1] < radius[:-2]) & (radius[1:-1] <= radius[2:]))[0] + 1
+    candidate_indices = find_turning_points(radius, kind="min", min_spacing=min_spacing, smooth_window=smooth_window)
     if candidate_indices.size < 3:
         raise ValueError("Need at least three periapses to fit precession")
 
@@ -95,3 +151,37 @@ def fit_orbit_precession(positions: np.ndarray, times: np.ndarray) -> dict[str, 
         "delta_phi_stderr": slope_stderr,
         "intercept": float(intercept),
     }
+
+
+def estimate_planar_orbit_shape(
+    positions: np.ndarray,
+    min_spacing: int = 1,
+    smooth_window: int = 1,
+) -> dict[str, float]:
+    coords = np.asarray(positions, dtype=np.float64)
+    radius = np.sqrt(coords[:, 0] ** 2 + coords[:, 1] ** 2)
+    peri_indices = find_turning_points(radius, kind="min", min_spacing=min_spacing, smooth_window=smooth_window)
+    apo_indices = find_turning_points(radius, kind="max", min_spacing=min_spacing, smooth_window=smooth_window)
+    if peri_indices.size == 0:
+        raise ValueError("Need at least one periapsis to estimate orbit shape")
+
+    peri_radius = float(np.median(radius[peri_indices]))
+    apo_radius = float(np.median(radius[apo_indices])) if apo_indices.size else float(np.max(radius))
+    semi_major_axis = 0.5 * (peri_radius + apo_radius)
+    eccentricity = (apo_radius - peri_radius) / max(apo_radius + peri_radius, 1.0e-12)
+    return {
+        "periapsis_radius": peri_radius,
+        "apoapsis_radius": apo_radius,
+        "semi_major_axis": float(semi_major_axis),
+        "eccentricity": float(eccentricity),
+    }
+
+
+def estimate_beta_eff(
+    delta_phi: float,
+    semi_major_axis: float,
+    eccentricity: float,
+    mu: float,
+    c_eff: float,
+) -> float:
+    return float(delta_phi * c_eff**2 * semi_major_axis * (1.0 - eccentricity**2) / (2.0 * math.pi * mu))
