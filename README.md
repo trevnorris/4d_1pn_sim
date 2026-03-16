@@ -108,6 +108,12 @@ Screening matrix for the current `320^3` branch:
 ./scripts/run_exp03_newtonian_bound_orbit_320_screen.sh
 ```
 
+Trap-strength screen for the promoted `320^3` `sponge_only` branch:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_320_trap_screen.sh
+```
+
 ## Runtime guidance
 
 - The `256^3` long-orbit PDE branch is a serious run, not a quick local sanity check.

@@ -26,4 +26,4 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the guarded `320^3 / L=60` Newtonian `sponge_only` smoke branch on GPU, then promote to the matching long restart branch if the smoke result stays operationally clean under the updated abort guard.
+- Run the guarded `320^3 / L=60` Newtonian `sponge_only` trap-strength screen on GPU, varying only `trap_strength_r` while holding the sponge and `w` confinement fixed.

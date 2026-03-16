@@ -1049,3 +1049,48 @@ Promotion note:
 
 - the runtime abort guard was patched so unmeasured leakage no longer counts as an automatic failure on no-refill branches,
 - the promoted `sponge_only` configs set `max_leakage = null` explicitly because `continuity_stride = 0` on the A40 path.
+
+### Run 027: `320^3` promoted `sponge_only` smoke
+
+- Command:
+  `./scripts/run_exp03_newtonian_bound_orbit_320_sponge_only_smoke.sh`
+- Output directory:
+  `outputs/runs/exp03_newtonian_bound_orbit_320_sponge_only_smoke`
+
+Key results:
+
+- runtime abort triggered at field step `1280` after `960 / 4096` orbit steps
+- abort gates:
+  `max_rel_energy_drift`, `max_rel_angular_momentum_drift`
+- maximum relative orbital-energy drift `= 2.440518e-01`
+- maximum relative angular-momentum drift `= 1.171726e-01`
+- mean coherence `= 0.9999995`
+- mean higher-mode fraction `= 4.8682e-03`
+- minimum boundary clearance `= 13.99996`
+
+Tracer comparison:
+
+- final radial error `(PDE - tracer) = -1.9456e-01`
+- radius RMS error `= 7.4701e-02`
+- final angle error `(PDE - tracer) = -3.0418e-02`
+- position RMS error `= 2.3858e-01`
+
+Interpretation:
+
+- This was not a bad rerun; it matches the earlier `sponge_only` screen at the same time slice and simply extends the same secular COM drift to a longer window.
+- The defect remains healthy and compact, and boundary clearance remains large.
+- The dominant failure is still progressive tangential-speed loss and inward COM drift.
+
+Prepared next branch:
+
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_r080.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_r100.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_r120.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_r140.json`
+- `scripts/run_exp03_newtonian_bound_orbit_320_trap_screen.sh`
+
+Purpose:
+
+- hold the successful `sponge_only` protocol fixed,
+- vary only `trap_strength_r`,
+- test whether long-window COM drift is primarily driven by radial confinement strength rather than refill or boundary handling.

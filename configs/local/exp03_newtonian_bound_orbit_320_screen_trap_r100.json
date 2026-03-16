@@ -1,0 +1,103 @@
+{
+  "run_name": "exp03_newtonian_bound_orbit_320_screen_trap_r100",
+  "seed": 1234,
+  "device": "cuda",
+  "dtype": "float32",
+  "complex_dtype": "complex64",
+  "output_dir": "outputs/runs/exp03_newtonian_bound_orbit_320_screen_trap_r100",
+  "overwrite_output": true,
+  "grid": {
+    "shape": [320, 320, 320],
+    "length": [60.0, 60.0, 60.0]
+  },
+  "hermite": {
+    "num_modes": 4,
+    "lambda_w": 1.25,
+    "quadrature_order": 20
+  },
+  "eos": {
+    "K_eos": 0.08,
+    "n": 5.0
+  },
+  "geometry": {
+    "lambda_aspect": 3.0,
+    "reference_rho": 1.0,
+    "reference_a": 1.1,
+    "reference_energy_scale": 1.0
+  },
+  "solver": {
+    "mass": 1.0,
+    "kinetic_prefactor": 0.5,
+    "transverse_prefactor": 0.2,
+    "trap_strength_r": 1.0,
+    "trap_strength_w": 0.9,
+    "dt": 0.015,
+    "checkpoint_every": 0,
+    "progress_every": 512
+  },
+  "initializer": {
+    "imaginary_dt": 0.008,
+    "steps": 320,
+    "target_norm": 1.0,
+    "gaussian_width": 1.1
+  },
+  "background": {
+    "profile": "pure_kepler",
+    "mu": 6.0,
+    "softening_length": 0.0,
+    "core_radius": 0.05,
+    "center": [0.0, 0.0, 0.0],
+    "c_eff": 24.0,
+    "density_coupling": 1.0
+  },
+  "boundary_sponge": {
+    "enabled": true,
+    "width": 6.0,
+    "strength": 8.0,
+    "power": 2.0
+  },
+  "reservoir_refill": {
+    "enabled": false
+  },
+  "experiment": {
+    "periapsis_radius": 16.0,
+    "eccentricity": 0.05,
+    "velocity_scale": 1.0,
+    "orbit_steps": 4096,
+    "fit_start_index": 0,
+    "turning_point_min_spacing": 1,
+    "turning_point_smooth_window": 9,
+    "turning_point_prominence_fraction": 0.02,
+    "metric_stride": 16,
+    "continuity_stride": 0
+  },
+  "launch_calibration": {
+    "enabled": true,
+    "probe_steps": 128,
+    "measure_start_step": 16,
+    "measure_end_step": 80,
+    "safe_nyquist_fraction": 0.65,
+    "velocity_scale_samples": [0.9, 0.95, 1.0, 1.05, 1.1]
+  },
+  "newtonian_gate": {
+    "min_periapse_count": 3,
+    "max_abs_beta_eff": 0.2,
+    "max_rel_energy_drift": 0.05,
+    "max_rel_angular_momentum_drift": 0.05,
+    "min_coherence": 0.995,
+    "max_higher_mode_fraction": 0.01,
+    "max_leakage": null
+  },
+  "runtime_abort": {
+    "enabled": true,
+    "check_stride": 256,
+    "min_steps_before_check": 512,
+    "required_consecutive_failures": 2,
+    "max_rel_energy_drift": 0.18,
+    "max_rel_angular_momentum_drift": 0.10,
+    "min_coherence": 0.99,
+    "max_higher_mode_fraction": 0.02,
+    "max_leakage": null,
+    "min_boundary_clearance": 10.0
+  }
+}
