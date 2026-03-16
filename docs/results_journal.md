@@ -997,3 +997,55 @@ Purpose:
 - isolate whether inward collapse is caused primarily by the sponge, by the refill law, or only by their combination,
 - specifically remove the previously implicated `restore_target_norm = true` path,
 - keep the box, grid spacing, and orbit family fixed so the controls are directly comparable.
+
+### Run 026: `320^3` sponge/refill screen results
+
+Screen outputs:
+
+- `outputs/runs/exp03_newtonian_bound_orbit_320_screen_sponge_only`
+- `outputs/runs/exp03_newtonian_bound_orbit_320_screen_refill_leakonly`
+- `outputs/runs/exp03_newtonian_bound_orbit_320_screen_sponge_refill_leakonly`
+- `outputs/runs/exp03_newtonian_bound_orbit_320_screen_weak_sponge_refill_leakonly`
+
+Key comparison:
+
+- `sponge_only`
+  - radius RMS error versus point tracer `= 7.9538e-03`
+  - final radial error `= -2.0892e-02`
+  - position RMS error `= 5.3896e-02`
+  - maximum relative energy drift `= 1.2126e-01`
+  - maximum relative angular-momentum drift `= 5.6500e-02`
+  - mean coherence `= 0.9999995`
+- `weak_sponge_refill_leakonly`
+  - radius RMS error `= 4.9930e-01`
+  - final radial error `= -1.4505`
+  - position RMS error `= 5.2434e-01`
+  - maximum relative energy drift `= 1.4001e-01`
+  - maximum relative angular-momentum drift `= 1.1736e-01`
+  - mean coherence `= 0.9996474`
+- `sponge_refill_leakonly`
+  - radius RMS error `= 1.5079`
+  - final radial error `= -4.4052`
+- `refill_leakonly`
+  - radius RMS error `= 2.3319`
+  - final radial error `= -6.8433`
+  - mean coherence fell below the runtime gate
+
+Interpretation:
+
+- The boundary sponge clearly helps.
+- The first uniform refill law does not help the orbit branch; every refill-enabled variant performed materially worse than `sponge_only`.
+- The strongest current branch is therefore `sponge_only`, not any refill-enabled variant.
+- Refill is still expected to matter for boxed long runs, but the current naive uniform reinjection law should not be promoted further.
+
+Prepared next branch:
+
+- `configs/local/exp03_newtonian_bound_orbit_320_sponge_only_smoke.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_sponge_only_restart.json`
+- `scripts/run_exp03_newtonian_bound_orbit_320_sponge_only_smoke.sh`
+- `scripts/run_exp03_newtonian_bound_orbit_320_sponge_only_restart.sh`
+
+Promotion note:
+
+- the runtime abort guard was patched so unmeasured leakage no longer counts as an automatic failure on no-refill branches,
+- the promoted `sponge_only` configs set `max_leakage = null` explicitly because `continuity_stride = 0` on the A40 path.

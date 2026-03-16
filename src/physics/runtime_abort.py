@@ -45,10 +45,8 @@ def evaluate_runtime_abort_check(
         "max_higher_mode_fraction": finite_metrics
         and observed["mean_higher_mode_fraction"] <= float(thresholds["max_higher_mode_fraction"]),
         "max_leakage": True
-        if leakage_threshold is None
-        else finite_metrics
-        and observed["mean_leakage"] is not None
-        and observed["mean_leakage"] <= float(leakage_threshold),
+        if leakage_threshold is None or observed["mean_leakage"] is None
+        else finite_metrics and observed["mean_leakage"] <= float(leakage_threshold),
         "min_boundary_clearance": finite_metrics
         and observed["min_boundary_clearance"] >= float(thresholds["min_boundary_clearance"]),
     }

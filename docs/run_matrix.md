@@ -16,7 +16,7 @@ This file tracks the experiment ladder status at a glance.
 | PDE static force / infall regression | `complete` | Static `1/r^2` force law validated; converged by `64^3`; `256^3` chosen for orbit-quality defect resolution |
 | PDE Newtonian short-arc control (`256^3`, no dressing) | `complete` | Passed tracer-matched short-arc acceptance gate |
 | PDE Newtonian short-arc comparison (`256^3`, with dressing) | `complete` | Also passed; differential signal versus control is tiny |
-| PDE Newtonian long bound orbit | `active` | Implemented and CUDA-validated end-to-end; the first guarded `256^3 / L=48` and `320^3 / L=60` no-refill/no-sponge runs both aborted early on COM drift while the defect remained coherent, so the promoted next branch keeps `320^3 / L=60` but adds a boundary sponge plus uniform reservoir refill |
+| PDE Newtonian long bound orbit | `active` | Implemented and CUDA-validated end-to-end; the first guarded `256^3 / L=48` and `320^3 / L=60` no-refill/no-sponge runs both aborted early on COM drift while the defect remained coherent. The `320^3` control screen then showed `sponge_only` is clearly best, while the first uniform refill law degrades the orbit. |
 | ODE Newtonian reference | `complete` | Fitter / shared orbit analysis give near-zero drift with excellent conservation |
 | ODE 1PN reference | `blocked` | Waiting until Newtonian reference and shared diagnostics are in place |
 | PDE 1PN static self-sector test | `blocked` | Deferred until long Newtonian PDE orbit is clean |
@@ -26,4 +26,4 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the guarded `320^3 / L=60` Newtonian smoke branch on GPU with the boundary sponge and uniform reservoir refill enabled, then promote to the matching long restart branch if the smoke result is operationally clean.
+- Run the guarded `320^3 / L=60` Newtonian `sponge_only` smoke branch on GPU, then promote to the matching long restart branch if the smoke result stays operationally clean under the updated abort guard.
