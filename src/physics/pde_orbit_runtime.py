@@ -98,6 +98,8 @@ def run_static_launch_calibration(
     background_potential,
     rho0: float,
     scenario: str,
+    node_amplitude_mask=None,
+    refill_controller_factory=None,
 ) -> dict[str, Any] | None:
     calibration = dict(config.get("launch_calibration", {}))
     if not bool(calibration.get("enabled", False)):
@@ -132,6 +134,8 @@ def run_static_launch_calibration(
             source_center=background.center,
             rho_reference=rho0,
             external_potential=background_potential,
+            node_amplitude_mask=node_amplitude_mask,
+            refill_controller_factory=refill_controller_factory,
             ambient_density_fn=background.ambient_density_at_position if scenario == "source_with_dressing" else None,
             measure_start_step=measure_start_step,
             measure_end_step=measure_end_step,

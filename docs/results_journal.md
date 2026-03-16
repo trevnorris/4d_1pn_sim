@@ -964,3 +964,23 @@ Branch rationale:
 Expected resource note:
 
 - using the observed A40 `256^3` memory footprint as the baseline, `320^3` should land near `29 GB`, which is practical on a `40 GB` card and leaves room for runtime overhead
+
+### Branch correction: boundary sponge + uniform reservoir refill
+
+After the first `320^3 / L = 60` cloud attempt, the user pointed out two missing controls from earlier exploratory work:
+
+- outgoing wake / sound content should be damped before it wraps through the periodic boundary,
+- the ambient medium should be replenished uniformly so the box does not slowly drain.
+
+Repository changes made in response:
+
+- added an optional boundary sponge applied as a real-space amplitude mask during the nonlinear step,
+- added a cheap mode-space projected leakage operator that avoids the old `currents()` OOM path,
+- added a uniform lowest-mode reservoir refill controller driven by the projected leakage estimate and optional target-norm restoration,
+- wired both controls into launch calibration and the `exp03` orbit branch.
+
+Interpretation:
+
+- the earlier `256^3` and `320^3` long-orbit failures remain useful as evidence that the uncorrected branch drifts badly,
+- but they are no longer the final word on the intended boxed simulation protocol,
+- because they did not include the sponge + refill machinery that the user reports was necessary in previous work.

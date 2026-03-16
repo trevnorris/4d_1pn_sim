@@ -125,6 +125,7 @@ class MatterSplitStepSolver:
         rho_ambient: float,
         external_potential: torch.Tensor | None = None,
         confinement_center: torch.Tensor | None = None,
+        node_amplitude_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         psi_nodes = self.reconstruct_nodes(psi_modes)
         potential = self.nonlinear_potential(
@@ -136,6 +137,9 @@ class MatterSplitStepSolver:
         )
         phase = torch.exp(torch.as_tensor(delta, device=psi_modes.device) * potential.to(self.complex_dtype))
         psi_nodes = psi_nodes * phase
+        if node_amplitude_mask is not None:
+            mask = node_amplitude_mask.unsqueeze(0) if node_amplitude_mask.ndim == 3 else node_amplitude_mask
+            psi_nodes = psi_nodes * mask.to(psi_nodes.dtype)
         return self.project_nodes(psi_nodes)
 
     def step(
@@ -144,6 +148,7 @@ class MatterSplitStepSolver:
         dt: float,
         rho_ambient: float,
         external_potential: torch.Tensor | None = None,
+        node_amplitude_mask: torch.Tensor | None = None,
     ) -> MatterState:
         a_value = self.geometry.equilibrium_a(rho_ambient, initial_guess=state.a)
         confinement_center = self.estimate_defect_center(state.psi_modes)
@@ -155,6 +160,7 @@ class MatterSplitStepSolver:
             rho_ambient,
             external_potential=external_potential,
             confinement_center=confinement_center,
+            node_amplitude_mask=node_amplitude_mask,
         )
         psi_next = self.linear_half_step(psi_full, -0.5j * dt)
         return MatterState(psi_modes=psi_next, time=state.time + dt, step=state.step + 1, a=a_value, rho_ambient=rho_ambient)
@@ -165,6 +171,7 @@ class MatterSplitStepSolver:
         dtau: float,
         target_norm: float,
         external_potential: torch.Tensor | None = None,
+        node_amplitude_mask: torch.Tensor | None = None,
     ) -> MatterState:
         a_value = self.geometry.equilibrium_a(state.rho_ambient, initial_guess=state.a)
         confinement_center = self.estimate_defect_center(state.psi_modes)
@@ -176,6 +183,7 @@ class MatterSplitStepSolver:
             state.rho_ambient,
             external_potential=external_potential,
             confinement_center=confinement_center,
+            node_amplitude_mask=node_amplitude_mask,
         )
         psi_next = self.linear_half_step(psi_full, -0.5 * dtau)
         psi_next = self.normalize_modes(psi_next, target_norm)

@@ -13,8 +13,10 @@ from src.core.config import load_json_config
 from src.core.io import collect_runtime_info, dump_json, ensure_dir
 from src.experiments.common import build_solver, prepare_relaxed_state, state_from_checkpoint
 from src.physics.background_sources import StaticCentralBackground
+from src.physics.boundary_sponge import build_boundary_sponge_mask
 from src.physics.defects import displace_and_boost_state
 from src.physics.newtonian_orbit_gate import evaluate_newtonian_orbit_gate
+from src.physics.open_system import UniformReservoirRefill
 from src.physics.orbit_diagnostics import summarize_effective_orbit_conservation, summarize_planar_orbit_trace
 from src.physics.pde_orbit_runtime import (
     run_static_launch_calibration,
@@ -40,6 +42,12 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     rho0 = float(config["geometry"]["reference_rho"])
     background = StaticCentralBackground.from_config(config["background"], rho_reference=rho0)
     background_potential = background.potential_field(solver.grid).to(solver.grid.real_dtype)
+    dt = float(config["solver"]["dt"])
+    boundary_sponge_config = dict(config.get("boundary_sponge", {}))
+    boundary_sponge_mask = None
+    if bool(boundary_sponge_config.get("enabled", False)):
+        boundary_sponge_mask = build_boundary_sponge_mask(solver.grid, dt=dt, config=boundary_sponge_config)
+    reservoir_refill_config = dict(config.get("reservoir_refill", {}))
 
     relaxed_restart_path = restart_relaxed or config.get("restart_relaxed")
     if relaxed_restart_path is None:
@@ -63,6 +71,14 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
 
     print("[exp03] stage=launch_calibration start", flush=True)
     calibration_start = time.monotonic()
+    refill_controller_factory = None
+    if bool(reservoir_refill_config.get("enabled", False)):
+        refill_controller_factory = lambda: UniformReservoirRefill.from_config(
+            solver=solver,
+            projection_kernel=projection_kernel,
+            target_norm=float(solver.total_norm(relaxed_state.psi_modes)),
+            config=reservoir_refill_config,
+        )
     calibration_summary = run_static_launch_calibration(
         solver=solver,
         relaxed_state=relaxed_state,
@@ -71,6 +87,8 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         background_potential=background_potential,
         rho0=rho0,
         scenario="source_no_dressing",
+        node_amplitude_mask=boundary_sponge_mask,
+        refill_controller_factory=refill_controller_factory,
     )
     print(f"[exp03] stage=launch_calibration done elapsed_s={time.monotonic() - calibration_start:.2f}", flush=True)
     if calibration_summary is None:
@@ -102,12 +120,19 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     )
 
     reference_modes = state.psi_modes.clone()
+    orbit_refill_controller = None
+    if bool(reservoir_refill_config.get("enabled", False)):
+        orbit_refill_controller = UniformReservoirRefill.from_config(
+            solver=solver,
+            projection_kernel=projection_kernel,
+            target_norm=float(solver.total_norm(state.psi_modes)),
+            config=reservoir_refill_config,
+        )
     checkpoint_every = int(config["solver"].get("checkpoint_every", 0))
     progress_every = int(config["solver"].get("progress_every", max(checkpoint_every, 256) if checkpoint_every > 0 else 256))
     metric_stride = int(config["experiment"].get("metric_stride", 16))
     continuity_stride = int(config["experiment"].get("continuity_stride", 64))
     continuity_sampling_enabled = continuity_stride > 0
-    dt = float(config["solver"]["dt"])
     steps = int(config["experiment"]["orbit_steps"])
     runtime_abort_config = dict(config.get("runtime_abort", {}))
     runtime_abort_enabled = bool(runtime_abort_config.get("enabled", False))
@@ -139,6 +164,9 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     leakage_history: list[float] = []
     continuity_history: list[float] = []
     boundary_clearance_history: list[float] = []
+    signed_leakage_history: list[float] = []
+    refill_applied_history: list[float] = []
+    refill_sample_times: list[float] = []
     final_snapshot: dict[str, Any] | None = None
     completed_steps = 0
     runtime_abort_check_count = 0
@@ -166,7 +194,15 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             dt=dt,
             rho_ambient=rho0,
             external_potential=background_potential,
+            node_amplitude_mask=boundary_sponge_mask,
         )
+        refill_metrics = None
+        if orbit_refill_controller is not None:
+            state, refill_metrics = orbit_refill_controller.apply(solver=solver, state=state, dt=dt)
+            refill_sample_times.append(float(state.time))
+            leakage_history.append(float(refill_metrics["mean_leakage"]))
+            signed_leakage_history.append(float(refill_metrics["signed_leakage_mean"]))
+            refill_applied_history.append(float(refill_metrics["delta_norm_applied"]))
         defect_time.append(float(state.time))
         current_center = solver.estimate_defect_center(state.psi_modes).detach().cpu().numpy()
         defect_positions.append(current_center.tolist())
@@ -192,7 +228,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
                 **light_metrics,
             }
 
-        if continuity_stride > 0 and ((idx + 1) % continuity_stride == 0 or idx == steps - 1):
+        if continuity_sampling_enabled and ((idx + 1) % continuity_stride == 0 or idx == steps - 1):
             previous_continuity_snapshot, continuity_metrics = sample_continuity_metrics(
                 solver=solver,
                 state=state,
@@ -200,7 +236,6 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
                 previous_snapshot=previous_continuity_snapshot,
             )
             continuity_sample_times.append(float(state.time))
-            leakage_history.append(float(continuity_metrics["mean_leakage"]))
             continuity_history.append(float(continuity_metrics["mean_continuity_residual"]))
 
         if (
@@ -341,11 +376,23 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         "mean_leakage": (
             window_mean(
                 np.asarray(leakage_history, dtype=np.float64),
-                continuity_sample_times_array,
+                np.asarray(refill_sample_times, dtype=np.float64)
+                if refill_sample_times
+                else continuity_sample_times_array,
                 window_start_time,
                 window_end_time,
             )
-            if continuity_sampling_enabled
+            if leakage_history
+            else None
+        ),
+        "mean_signed_leakage": (
+            window_mean(
+                np.asarray(signed_leakage_history, dtype=np.float64),
+                np.asarray(refill_sample_times, dtype=np.float64),
+                window_start_time,
+                window_end_time,
+            )
+            if signed_leakage_history
             else None
         ),
         "mean_compactness": window_mean(
@@ -369,6 +416,13 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         "continuity_sampling_enabled": bool(continuity_sampling_enabled),
         "metric_sample_count": int(metric_sample_times_array.size),
         "continuity_sample_count": int(continuity_sample_times_array.size),
+        "refill_sample_count": int(len(refill_sample_times)),
+        "mean_refill_delta_norm": float(np.mean(np.asarray(refill_applied_history, dtype=np.float64)))
+        if refill_applied_history
+        else 0.0,
+        "cumulative_refill_norm": float(orbit_refill_controller.cumulative_refill_norm)
+        if orbit_refill_controller is not None
+        else 0.0,
         "min_boundary_clearance": float(np.min(np.asarray(boundary_clearance_history, dtype=np.float64)))
         if boundary_clearance_history
         else 0.0,
@@ -402,6 +456,9 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         higher_mode_fraction=np.asarray(higher_mode_history, dtype=np.float64),
         continuity_sample_time=continuity_sample_times_array,
         mean_S_leak=np.asarray(leakage_history, dtype=np.float64),
+        signed_S_leak=np.asarray(signed_leakage_history, dtype=np.float64),
+        refill_sample_time=np.asarray(refill_sample_times, dtype=np.float64),
+        refill_delta_norm=np.asarray(refill_applied_history, dtype=np.float64),
         radius_of_gyration=np.asarray(compactness_history, dtype=np.float64),
         continuity_residual_l2=np.asarray(continuity_history, dtype=np.float64),
         boundary_clearance=np.asarray(boundary_clearance_history, dtype=np.float64),
@@ -417,6 +474,22 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         },
         "restart_relaxed": None if relaxed_restart_path is None else str(relaxed_restart_path),
         "defect_applied_speed": float(applied_speed),
+        "boundary_sponge": {
+            "enabled": bool(boundary_sponge_config.get("enabled", False)),
+            **(
+                {key: value for key, value in boundary_sponge_config.items() if key != "enabled"}
+                if boundary_sponge_config
+                else {}
+            ),
+        },
+        "reservoir_refill": {
+            "enabled": bool(reservoir_refill_config.get("enabled", False)),
+            **(
+                {key: value for key, value in reservoir_refill_config.items() if key != "enabled"}
+                if reservoir_refill_config
+                else {}
+            ),
+        },
         "launch_calibration": calibration_summary,
         "orbit_summary": orbit_summary,
         "defect_metrics": defect_metrics,
@@ -430,6 +503,16 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             "The defect confinement remains centered on the instantaneous defect COM as a reduced COM/internal split surrogate.",
             "The orbit_summary energy and angular-momentum drifts are effective COM point-particle diagnostics, not exact full-field invariants.",
             "This is a Newtonian-gate run, not a 1PN measurement run.",
+            (
+                "An optional boundary sponge is active to damp outgoing edge-reaching waves before they wrap through the periodic domain."
+                if bool(boundary_sponge_config.get("enabled", False))
+                else "No boundary sponge is active; the underlying pseudo-spectral domain remains periodic."
+            ),
+            (
+                "A uniform lowest-mode reservoir refill is active; it reinjects spatially uniform density using the projected leakage map and optional target-norm restoration."
+                if bool(reservoir_refill_config.get("enabled", False))
+                else "No explicit reservoir refill is active."
+            ),
         ],
     }
     dump_json(output_path / "summary.json", summary)
@@ -456,6 +539,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             if defect_metrics["mean_leakage"] is not None
             else "- mean leakage = n/a (continuity sampling disabled)"
         ),
+        f"- cumulative refill norm = {defect_metrics['cumulative_refill_norm']:.6e}",
         f"- min boundary clearance = {defect_metrics['min_boundary_clearance']:.6f}",
     ]
     (output_path / "plain_language_summary.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")

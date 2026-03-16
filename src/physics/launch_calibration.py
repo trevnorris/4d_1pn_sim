@@ -98,6 +98,8 @@ def probe_launch_response(
     source_center: Sequence[float],
     rho_reference: float,
     external_potential=None,
+    node_amplitude_mask=None,
+    refill_controller_factory=None,
     ambient_density_fn=None,
     measure_start_step: int = 4,
     measure_end_step: int | None = None,
@@ -111,6 +113,8 @@ def probe_launch_response(
     positions: list[list[float]] = []
     time: list[float] = []
     current = launched
+    refill_controller = None if refill_controller_factory is None else refill_controller_factory()
+    refill_metrics_last: dict[str, float] | None = None
     for _ in range(int(steps)):
         center = solver.estimate_defect_center(current.psi_modes)
         if ambient_density_fn is None:
@@ -122,7 +126,10 @@ def probe_launch_response(
             dt=dt,
             rho_ambient=rho_ambient,
             external_potential=external_potential,
+            node_amplitude_mask=node_amplitude_mask,
         )
+        if refill_controller is not None:
+            current, refill_metrics_last = refill_controller.apply(solver=solver, state=current, dt=dt)
         center = solver.estimate_defect_center(current.psi_modes).detach().cpu().numpy()
         positions.append(center.tolist())
         time.append(float(current.time))
@@ -156,6 +163,7 @@ def probe_launch_response(
         "window_summary": boundary_summary,
         "final_higher_mode_fraction": float(np.sum(occupations[1:]) / occupation_total),
         "final_norm": float(solver.total_norm(current.psi_modes)),
+        "refill_metrics": refill_metrics_last,
     }
 
 

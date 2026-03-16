@@ -51,6 +51,19 @@
     "c_eff": 24.0,
     "density_coupling": 1.0
   },
+  "boundary_sponge": {
+    "enabled": true,
+    "width": 6.0,
+    "strength": 8.0,
+    "power": 2.0
+  },
+  "reservoir_refill": {
+    "enabled": true,
+    "compensate_leakage": true,
+    "restore_target_norm": true,
+    "leakage_gain": 1.0,
+    "max_delta_norm_fraction_per_step": 5e-4
+  },
   "experiment": {
     "periapsis_radius": 16.0,
     "eccentricity": 0.05,
@@ -78,7 +91,7 @@
     "max_rel_angular_momentum_drift": 0.05,
     "min_coherence": 0.995,
     "max_higher_mode_fraction": 0.01,
-    "max_leakage": null
+    "max_leakage": 1e-6
   },
   "runtime_abort": {
     "enabled": true,
@@ -89,7 +102,7 @@
     "max_rel_angular_momentum_drift": 0.08,
     "min_coherence": 0.99,
     "max_higher_mode_fraction": 0.02,
-    "max_leakage": null,
+    "max_leakage": 5e-6,
     "min_boundary_clearance": 10.0
   }
 }
