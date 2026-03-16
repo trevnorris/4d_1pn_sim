@@ -984,3 +984,16 @@ Interpretation:
 - the earlier `256^3` and `320^3` long-orbit failures remain useful as evidence that the uncorrected branch drifts badly,
 - but they are no longer the final word on the intended boxed simulation protocol,
 - because they did not include the sponge + refill machinery that the user reports was necessary in previous work.
+
+Prepared next screen on the same cloud box:
+
+- `exp03_newtonian_bound_orbit_320_screen_sponge_only`
+- `exp03_newtonian_bound_orbit_320_screen_refill_leakonly`
+- `exp03_newtonian_bound_orbit_320_screen_sponge_refill_leakonly`
+- `exp03_newtonian_bound_orbit_320_screen_weak_sponge_refill_leakonly`
+
+Purpose:
+
+- isolate whether inward collapse is caused primarily by the sponge, by the refill law, or only by their combination,
+- specifically remove the previously implicated `restore_target_norm = true` path,
+- keep the box, grid spacing, and orbit family fixed so the controls are directly comparable.

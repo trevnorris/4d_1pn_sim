@@ -102,6 +102,12 @@ Recommended next cloud-GPU branch:
 ./scripts/run_exp03_newtonian_bound_orbit_320_cuda_restart.sh
 ```
 
+Screening matrix for the current `320^3` branch:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_320_screen.sh
+```
+
 ## Runtime guidance
 
 - The `256^3` long-orbit PDE branch is a serious run, not a quick local sanity check.
