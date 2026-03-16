@@ -95,6 +95,13 @@ PDE Newtonian bound-orbit gate with explicit CUDA requirement:
 ./scripts/run_exp03_newtonian_bound_orbit_256_cuda.sh
 ```
 
+Recommended next cloud-GPU branch:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_320_cuda_smoke.sh
+./scripts/run_exp03_newtonian_bound_orbit_320_cuda_restart.sh
+```
+
 ## Runtime guidance
 
 - The `256^3` long-orbit PDE branch is a serious run, not a quick local sanity check.
@@ -102,6 +109,7 @@ PDE Newtonian bound-orbit gate with explicit CUDA requirement:
 - The CUDA wrapper is the intended fire-and-forget path for cloud GPUs because it performs a preflight check before starting the long job.
 - The long `exp03` restart configs now include a runtime abort guard. If effective COM drift, defect integrity, or boundary clearance go decisively off-rail, the run stops early and still writes `summary.json` plus `plain_language_summary.txt`.
 - The current long-orbit restart configs reuse the saved relaxed checkpoint at `outputs/runs/exp02_shortarc_256/checkpoint_relaxed.npz` to avoid repeating the most expensive setup stage.
+- The current recommended cloud branch is `320^3` with `L = 60`, run first as a guarded smoke path and then as a restart from the smoke run's `checkpoint_relaxed.npz`.
 
 ## Documentation
 

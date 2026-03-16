@@ -878,3 +878,88 @@ Interpretation:
 
 - The next serious Newtonian gate is now implemented, not just planned.
 - The remaining open question is runtime / stability on the real `256^3` PDE branch over a long enough window to extract several periapses and compare against the ODE zero-drift baseline.
+
+### Run 022: PDE Newtonian bound-orbit smoke completion
+
+- Command:
+  `python -m src.experiments.exp03_pde_newtonian_bound_orbit --config configs/local/exp03_newtonian_bound_orbit_smoke.json`
+- Output directory:
+  `outputs/runs/exp03_newtonian_bound_orbit_smoke`
+- Status:
+  complete
+
+Result:
+
+- `newtonian_gate_pass = false`
+- `fit_error = Need at least three periapses to fit precession`
+- `periapse_count = 0`
+- maximum relative orbital-energy drift `= 1.374291e-01`
+- maximum relative angular-momentum drift `= 6.433493e-02`
+- mean coherence `= 0.999998`
+- mean higher-mode fraction `= 5.190919e-03`
+- mean leakage `= 2.918110e-08`
+
+Interpretation:
+
+- The `exp03` branch runs end-to-end and writes the full artifact set on the real `256^3` PDE path.
+- The defect remains extremely coherent, so the first observed failure mode is not breakup.
+- Even before completing a full orbit, the effective COM diagnostics already show nontrivial drift.
+- This smoke result is therefore an operational success but not a clean Newtonian-orbit success.
+
+### Run 023: PDE Newtonian bound-orbit guarded CUDA run
+
+- Command:
+  `./scripts/run_exp03_newtonian_bound_orbit_256_cuda.sh`
+- Output directory:
+  `outputs/runs/exp03_newtonian_bound_orbit_256_restart_cuda`
+- Status:
+  complete, terminated by runtime abort
+
+Result:
+
+- runtime abort triggered at field step `1024` after `704 / 16384` orbit steps
+- abort gates:
+  `max_rel_energy_drift`, `max_rel_angular_momentum_drift`
+- maximum relative orbital-energy drift `= 1.847236e-01`
+- maximum relative angular-momentum drift `= 8.746695e-02`
+- mean coherence `= 0.9999983784827319`
+- mean higher-mode fraction `= 4.709897568153048e-03`
+- mean leakage `= 2.630619416238938e-08`
+- minimum boundary clearance `= 11.999991416931152`
+- point-tracer comparison over the same window:
+  - final radial offset `(PDE - tracer) = -1.3913545129944715e-01`
+  - angular sweep offset `(PDE - tracer) = -2.459837072839255e-02`
+  - position RMS difference `= 1.4884677974948907e-01`
+  - radius RMS difference `= 5.339060230033025e-02`
+
+Interpretation:
+
+- The runtime abort guard did its job and prevented spending the full long-run budget on a clearly failing orbit.
+- The defect stays healthy and well away from the box boundary, so the dominant failure is still in effective COM orbital quality.
+- Relative to the exact tracer, the PDE COM is lagging in angle and falling inward too quickly over the same short window.
+- That pattern is consistent with excess effective dissipation / secular drift in the current long-window orbit setup, not with source misconfiguration or defect breakup.
+- The next promising branch is not “more time on the same run.” It is a larger physical orbit domain at roughly the same `dx`, so the defect stays pointlike while the orbit curvature and COM confinement coupling are both reduced.
+- On the observed `15 GB` A40 memory footprint for `256^3`, `288^3` and likely `320^3` are plausible next candidates; `384^3` is likely too large for a `40 GB` card.
+
+### Prepared next branch: guarded `320^3 / L = 60` Newtonian orbit
+
+- New smoke config:
+  `configs/local/exp03_newtonian_bound_orbit_320_cuda_smoke.json`
+- New smoke wrapper:
+  `scripts/run_exp03_newtonian_bound_orbit_320_cuda_smoke.sh`
+- New restart config:
+  `configs/local/exp03_newtonian_bound_orbit_320_restart_cuda.json`
+- New restart wrapper:
+  `scripts/run_exp03_newtonian_bound_orbit_320_cuda_restart.sh`
+
+Branch rationale:
+
+- keep `dx = 0.1875` unchanged from the validated `256^3` branch
+- increase the physical box from `L = 48` to `L = 60`
+- move the periapsis radius to `r_p = 16`
+- keep the same low eccentricity `e = 0.05`
+- retain the runtime abort guard so cloud runs still stop early if effective COM drift remains unacceptable
+
+Expected resource note:
+
+- using the observed A40 `256^3` memory footprint as the baseline, `320^3` should land near `29 GB`, which is practical on a `40 GB` card and leaves room for runtime overhead
