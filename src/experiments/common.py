@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import torch
 
+from src.core.checkpoints import load_checkpoint
 from src.core.grids import SpatialGrid3D, resolve_device
 from src.core.hermite import HermiteBasis
 from src.core.projection import ProjectionKernel
@@ -83,6 +85,20 @@ def clone_state(state: MatterState) -> MatterState:
         step=int(state.step),
         a=float(state.a),
         rho_ambient=float(state.rho_ambient),
+    )
+
+
+def state_from_checkpoint(
+    path: str | Path,
+    solver: MatterSplitStepSolver,
+) -> MatterState:
+    checkpoint_state = load_checkpoint(path, device=solver.grid.device, complex_dtype=solver.complex_dtype)
+    return MatterState(
+        psi_modes=checkpoint_state["psi_modes"],
+        time=float(checkpoint_state["time"]),
+        step=int(checkpoint_state["step"]),
+        a=float(checkpoint_state["a"]),
+        rho_ambient=float(checkpoint_state["rho_ambient"]),
     )
 
 

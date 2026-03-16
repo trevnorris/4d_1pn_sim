@@ -10,6 +10,13 @@ import torch
 def resolve_device(device_name: str) -> torch.device:
     if device_name == "cuda_if_available":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device_name.startswith("cuda"):
+        if not torch.cuda.is_available():
+            torch_cuda = torch.version.cuda or "none"
+            raise RuntimeError(
+                f"CUDA device requested ({device_name}) but torch.cuda.is_available() is False. "
+                f"Installed torch build: {torch.__version__} (torch.version.cuda={torch_cuda})."
+            )
     return torch.device(device_name)
 
 

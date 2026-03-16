@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 
 from src.physics.background_sources import StaticCentralBackground
-from src.physics.fitting import estimate_beta_eff, estimate_planar_orbit_shape, fit_orbit_precession
+from src.physics.orbit_diagnostics import summarize_planar_orbit_trace
 
 
 @dataclass(frozen=True)
@@ -41,19 +41,16 @@ def initial_state_from_periapsis(
     return PointParticleState(position=position, velocity=velocity)
 
 
-def run_point_particle_orbit(
+def run_point_particle_trajectory(
     background: StaticCentralBackground,
-    periapsis_radius: float,
-    eccentricity: float,
+    initial_position: np.ndarray,
+    initial_velocity: np.ndarray,
     dt: float,
     steps: int,
-    velocity_scale: float = 1.0,
 ) -> dict[str, np.ndarray]:
-    state = initial_state_from_periapsis(
-        periapsis_radius=periapsis_radius,
-        eccentricity=eccentricity,
-        background=background,
-        velocity_scale=velocity_scale,
+    state = PointParticleState(
+        position=np.asarray(initial_position, dtype=np.float64).copy(),
+        velocity=np.asarray(initial_velocity, dtype=np.float64).copy(),
     )
     time = np.empty(steps, dtype=np.float64)
     position = np.empty((steps, 3), dtype=np.float64)
@@ -75,42 +72,52 @@ def run_point_particle_orbit(
     }
 
 
+def run_point_particle_orbit(
+    background: StaticCentralBackground,
+    periapsis_radius: float,
+    eccentricity: float,
+    dt: float,
+    steps: int,
+    velocity_scale: float = 1.0,
+) -> dict[str, np.ndarray]:
+    state = initial_state_from_periapsis(
+        periapsis_radius=periapsis_radius,
+        eccentricity=eccentricity,
+        background=background,
+        velocity_scale=velocity_scale,
+    )
+    return run_point_particle_trajectory(
+        background=background,
+        initial_position=state.position,
+        initial_velocity=state.velocity,
+        dt=dt,
+        steps=steps,
+    )
+
+
 def summarize_point_particle_orbit(
     trajectory: dict[str, np.ndarray],
     mu: float,
     c_eff: float,
+    source_center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    potential_fn=None,
     fit_start_index: int = 0,
     turning_point_min_spacing: int = 1,
     turning_point_smooth_window: int = 1,
+    turning_point_min_spacing_fraction: float = 0.35,
+    turning_point_prominence_fraction: float = 0.08,
 ) -> dict[str, Any]:
-    positions = trajectory["position"][fit_start_index:]
-    time = trajectory["time"][fit_start_index:]
-    fit = fit_orbit_precession(
-        positions=positions,
-        times=time,
-        min_spacing=turning_point_min_spacing,
-        smooth_window=turning_point_smooth_window,
-    )
-    shape = estimate_planar_orbit_shape(
-        positions=positions,
-        min_spacing=turning_point_min_spacing,
-        smooth_window=turning_point_smooth_window,
-    )
-    beta_eff = estimate_beta_eff(
-        delta_phi=fit["delta_phi"],
-        semi_major_axis=shape["semi_major_axis"],
-        eccentricity=shape["eccentricity"],
+    return summarize_planar_orbit_trace(
+        time=trajectory["time"],
+        positions=trajectory["position"],
+        velocities=trajectory["velocity"],
         mu=mu,
         c_eff=c_eff,
+        source_center=source_center,
+        potential_fn=potential_fn,
+        fit_start_index=fit_start_index,
+        turning_point_min_spacing=turning_point_min_spacing,
+        turning_point_smooth_window=turning_point_smooth_window,
+        turning_point_min_spacing_fraction=turning_point_min_spacing_fraction,
+        turning_point_prominence_fraction=turning_point_prominence_fraction,
     )
-    return {
-        "delta_phi": float(fit["delta_phi"]),
-        "delta_phi_stderr": float(fit["delta_phi_stderr"]),
-        "beta_eff": float(beta_eff),
-        "semi_major_axis": float(shape["semi_major_axis"]),
-        "eccentricity": float(shape["eccentricity"]),
-        "periapse_times": fit["periapse_times"].tolist(),
-        "periapse_angles": fit["periapse_angles"].tolist(),
-        "turning_point_min_spacing": int(turning_point_min_spacing),
-        "turning_point_smooth_window": int(turning_point_smooth_window),
-    }

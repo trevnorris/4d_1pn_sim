@@ -1,11 +1,116 @@
 # 4D 1PN Simulator
 
-PyTorch prototype for the 4D toy-model Sprint 1 scope:
+PyTorch simulator and falsification harness for the 4D toy-model Newtonian-to-1PN program.
+
+## Current scope
+
+Implemented today:
 
 - Hermite-mode utilities in the transverse direction `w`
 - projection and leakage helpers
 - matter-only split-step solver in `x,y,z` times Hermite modes
 - one-DOF adiabatic geometry closure for `a(t)` with fixed `L = Lambda * a`
-- single-defect Experiment 1 runner and summary script
+- single-defect Experiment 1 closure regression
+- static-background infall resolution sweep
+- tracer-matched `256^3` short-arc controls
+- shared ODE/PDE orbit diagnostics
+- ODE Newtonian orbit reference
+- PDE Newtonian bound-orbit gate runner
 
-The current implementation is intentionally limited to the matter plus geometry sector. The Maxwell, free-heavy, and two-live-defect sectors are left as explicit placeholders for later sprints.
+Still intentionally missing:
+
+- full Maxwell / KK sector
+- free-heavy source runs
+- two-live-defect / moving-pair sector
+- PDE 1PN interpretation work beyond the current Newtonian gate
+
+The active development plan is in [docs/newtonian_to_1pn_program.md](docs/newtonian_to_1pn_program.md).
+
+## Install
+
+Use the repo environment:
+
+```bash
+python -m pip install -e .
+```
+
+or:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+## Quick checks
+
+Run the full test suite:
+
+```bash
+pytest -q
+```
+
+Check whether the current Python/Torch environment can actually see CUDA:
+
+```bash
+python -m src.scripts.check_cuda_runtime
+python -m src.scripts.check_cuda_runtime --require-cuda
+```
+
+Important:
+
+- configs that use `"device": "cuda_if_available"` will fall back to CPU
+- configs that use `"device": "cuda"` now fail fast if CUDA is not available
+- this is deliberate so cloud runs do not silently spend hours on CPU
+
+## Main commands
+
+Experiment 1 closure regression:
+
+```bash
+python -m src.experiments.exp01_single_defect_response --config configs/local/exp01_debug.json
+python -m src.scripts.summarize_run --run-dir outputs/runs/exp01_debug
+```
+
+ODE Newtonian reference:
+
+```bash
+python -m src.ode.newtonian_orbit --config configs/local/ode_newtonian_reference.json
+```
+
+Short-arc `256^3` control from the saved relaxed checkpoint:
+
+```bash
+./scripts/run_exp02_shortarc_256_restart.sh
+python -m src.scripts.run_short_arc_static_background --config configs/local/exp02_shortarc_256_restart.json --scenario source_with_dressing
+```
+
+PDE Newtonian bound-orbit gate on CPU restart path:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_256_restart.sh
+```
+
+PDE Newtonian bound-orbit gate with explicit CUDA requirement:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_256_cuda.sh
+```
+
+## Runtime guidance
+
+- The `256^3` long-orbit PDE branch is a serious run, not a quick local sanity check.
+- CPU runs can take many hours.
+- The CUDA wrapper is the intended fire-and-forget path for cloud GPUs because it performs a preflight check before starting the long job.
+- The current long-orbit restart configs reuse the saved relaxed checkpoint at `outputs/runs/exp02_shortarc_256/checkpoint_relaxed.npz` to avoid repeating the most expensive setup stage.
+
+## Documentation
+
+Current status and run history:
+
+- [docs/results_journal.md](docs/results_journal.md)
+- [docs/run_matrix.md](docs/run_matrix.md)
+- [docs/analysis_pipeline.md](docs/analysis_pipeline.md)
+- [docs/exp02_audit_matrix.md](docs/exp02_audit_matrix.md)
+
+Target constants:
+
+- [reference/symbolic_targets.json](reference/symbolic_targets.json)

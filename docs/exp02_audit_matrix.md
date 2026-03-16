@@ -22,6 +22,15 @@ Purpose: turn the static-background orbit work into a staged discriminator rathe
 - The active next control is the wide-box fallback based on `configs/local/exp02_widebox_r18_long.json`.
 - A new pre-orbit gate is now active in practice:
   static-background radial infall must show stable fall-rate convergence with increasing `N` before more orbit tuning is worth the wall time.
+- That pre-orbit gate has now been met.
+  - `64^3` and above reproduce the static `1/r^2` infall law well.
+  - `256^3` is the first tested point where the defect is also resolved by about `6.3` cells.
+- The active next branch is now a tracer-matched short-arc control at `256^3`, not another small-box perihelion attempt.
+- The first `256^3` short-arc control was interrupted by machine swap before completion, but it still established two useful facts:
+  - the `256^3` relaxation stage completes and leaves a reusable checkpoint,
+  - the launch calibration on the chosen `r_p = 12`, `e = 0.05` control is clean and target-reachable.
+- The rerun from the saved relaxed checkpoint now completed successfully for `source_no_dressing` and passed every short-arc acceptance gate.
+- The immediate next discriminator is therefore the matched `source_with_dressing` short arc on the same restart path.
 
 ## Decision rule
 
@@ -136,13 +145,62 @@ Interpretation:
 
 - Only after this gate passes should a nonzero `beta_eff` be treated as evidence for or against the static self-sector claim.
 
+## Check F: Tracer-matched short-arc gate
+
+Objective:
+
+- Verify that a resolved defect can follow the matched point-particle control over a finite orbital arc before attempting a multi-periapsis fit.
+
+Runs:
+
+1. `256^3` pure-Kepler `source_no_dressing` short arc
+2. matched `256^3` pure-Kepler `source_with_dressing` short arc after the control is acceptable
+
+Pass gates:
+
+- defect angular sweep at least `1.0` radian over the comparison window
+- angular-sweep mismatch `<= 0.12` radians
+- normalized position RMS `<= 0.08`
+- normalized radius RMS `<= 0.04`
+- phase RMS `<= 0.08`
+- boundary clearance `>= 8.0`
+- mean coherence `>= 0.995`
+- mean higher-mode fraction `<= 0.01`
+- mean leakage `<= 1e-6`
+
+Fail interpretation:
+
+- If the `no_dressing` control already fails, the remaining bottleneck is still defect launch / finite-size / COM handling rather than any claimed self-sector correction.
+- Only if the control passes and the dressed run then departs systematically is there a clean target for later precession fitting.
+- If the control cannot even be completed without swap collapse, the remaining bottleneck is operational:
+  the `256^3` branch needs checkpoint reuse and/or lighter restart paths before it can serve as a practical overnight discriminator on this machine.
+
+Current status:
+
+- `source_no_dressing` at `256^3`: pass
+- `source_with_dressing` at `256^3`: pass
+- Differential signal over the matched short arc:
+  very small
+  - angular-sweep shift `~ -9.3e-05`
+  - normalized position-RMS shift `~ +6.2e-05`
+  - phase-RMS shift `~ +5.0e-05`
+  - coherence / leakage / higher-mode changes all negligible at the current gate level
+
+Interpretation:
+
+- The short-arc gate is now passed for both branches.
+- The dressed and undressed trajectories are nearly indistinguishable over this window.
+- That localizes the next scientific question:
+  either the implemented static dressing effect is genuinely tiny on short arcs, or the relevant signal only emerges after longer accumulation.
+
 ## Recommended order
 
 1. Check A
 2. Check B
 3. Check C
 4. Check D
-5. Return to static-background orbit fits with Check E enforced
+5. Check F
+6. Return to static-background orbit fits with Check E enforced
 
 ## Current best evidence before audit completion
 
@@ -151,3 +209,4 @@ Interpretation:
 - Reason:
   low leakage and low mode contamination persist across many runs, but the hardened fitter no longer accepts the current trajectories as having enough well-separated periapses. The launch sweep and the completed `r_p = 16` long control now show why: on the current `40^3` physical box, the box-safe launches are still sub-target enough to fall inward, while the first speed-reachable launches sit too close to the periodic boundary. The next physically meaningful branch is therefore the wider box, not more tuning on the current domain.
   The first two radial-infall sweep points sharpen that further: `40^3` is underresolved and falls too fast, while `64^3` already matches the static infall oracle within about `3%`. So static-force diagnostics converge much earlier than orbit-quality runs, and orbit tuning should wait for the higher-resolution infall points before more wall time is spent there.
+  Run 016 now completed that convergence argument: the static infall law is stable from `64^3` upward, and `256^3` is the first tested point with roughly `6` cells across the defect core. The current active discriminator is therefore the `256^3` tracer-matched short-arc gate rather than any immediate return to perihelion fitting.

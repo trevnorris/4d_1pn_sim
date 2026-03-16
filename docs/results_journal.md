@@ -660,3 +660,221 @@ Force-law check on the completed infall traces:
   - the coarse `40^3` grid does not reproduce the intended static force law,
   - from `64^3` upward the completed runs already follow the expected `1/r^2` acceleration law to good accuracy for this diagnostic,
   - so the remaining reason to push toward `256^3` is defect resolution for future orbit work, not to repair the basic static fall law itself.
+
+### Run 017: First `256^3` tracer-matched short-arc control
+
+- Command:
+  `python -m src.scripts.run_short_arc_static_background --config configs/local/exp02_shortarc_256.json --scenario source_no_dressing`
+- Output directory:
+  `outputs/runs/exp02_shortarc_256`
+- Current status:
+  aborted by manual kill after the machine entered heavy swap
+
+Purpose:
+
+- Move from the static force-law diagnostic to the first orbit-relevant acceptance gate on the minimum serious grid identified by Run 016.
+- Compare a live defect against a point tracer over a short arc in the same pure-Kepler background, rather than jumping directly to a perihelion fit.
+- Use the `source_no_dressing` branch first so any mismatch is attributable to defect launch / finite-size / COM handling before turning the adiabatic dressing response back on.
+
+Branch changes added before launch:
+
+- Added a short-arc comparison module:
+  `src/physics/short_arc.py`
+- Extended the point tracer with arbitrary initial-state support:
+  `src/physics/point_particle.py`
+- Added the runnable short-arc CLI:
+  `src/scripts/run_short_arc_static_background.py`
+- Added the first `256^3` short-arc config:
+  `configs/local/exp02_shortarc_256.json`
+- Added tests for tracer equivalence, short-arc summaries, and relaxed-checkpoint loading:
+  `tests/test_point_particle.py`
+  `tests/test_short_arc.py`
+  `tests/test_experiments_common.py`
+
+Current technical state:
+
+- `pytest -q` passes after the new short-arc branch was added.
+- The runner now supports reusing a pre-relaxed checkpoint, so follow-on `256^3` passes will not need to repeat the full imaginary-time setup.
+- The runner also now writes scenario-specific output directories for later `source_with_dressing` comparisons, avoiding overwrite of the control run.
+
+Interpretation before results:
+
+- Run 016 already showed that the static `1/r^2` force law is converged by `64^3` and that `256^3` is mainly needed for defect resolution in cells.
+- This short-arc branch is therefore the first orbit-tuning step that is physically worth the wall time.
+- The next question is not “does the force law exist?” but “can the resolved defect track the matched tracer cleanly enough over a finite arc to make later perihelion work meaningful?”
+
+Recovered partial artifacts after the abort:
+
+- `checkpoint_relaxed.npz`
+  - completed at relaxation step `320`
+  - saved centered relaxed state for reuse
+- `launch_calibration.json`
+  - calibration completed successfully before the abort
+  - target speed `= 0.7245688373094719`
+  - recommended applied speed `= 0.7245688373094719`
+  - realized tangential speed `= 0.7199834498638411`
+  - mean radial speed `= 0.0012885926125991009`
+  - launch-radius bias `= 5.766979207137979e-04`
+  - minimum boundary clearance in the probe window `= 12.001336097717285`
+  - `target_reachable = True`
+  - `recommended_window_usable = True`
+- `checkpoint_inserted.npz`
+  - confirms the defect was inserted after calibration
+- `checkpoint_step_00512.npz`
+  - confirms the live defect evolution reached step `512 / 1536`
+  - simulation time at that checkpoint `= 2.88`
+
+Interpretation after the abort:
+
+- The run did not fail immediately for physical reasons.
+- The `256^3` control got through the expensive setup stages cleanly enough to produce a reusable relaxed checkpoint and a clean launch-calibration result.
+- The most immediately useful artifact is `checkpoint_relaxed.npz`, because it lets follow-on `256^3` runs skip the swap-heavy relaxation stage.
+- The launch-calibration result is also scientifically useful:
+  the matched tracer setup at `r_p = 12`, `e = 0.05` on the pure-Kepler background appears box-safe and target-reachable at `256^3`.
+- What is still missing is the defect timeseries and final short-arc acceptance summary, so there is not yet a physics conclusion about defect-vs-tracer tracking.
+
+Prepared rerun path after the abort:
+
+- dedicated restart config:
+  `configs/local/exp02_shortarc_256_restart.json`
+- manual wrapper script:
+  `scripts/run_exp02_shortarc_256_restart.sh`
+- key operational changes:
+  - reuse the saved relaxed checkpoint instead of repeating the `256^3` imaginary-time setup
+  - no intermediate `~500 MB` checkpoints during the short-arc evolution
+  - cheap short-arc metrics sampled every `16` steps
+  - expensive continuity/leakage diagnostics sampled every `64` steps
+  - thread caps applied in the shell wrapper to reduce host-memory pressure
+
+### Run 018: `256^3` tracer-matched short-arc control, restart path
+
+- Command:
+  `./scripts/run_exp02_shortarc_256_restart.sh`
+- Output directory:
+  `outputs/runs/exp02_shortarc_256_restart_source_no_dressing`
+- Status:
+  complete
+
+Result:
+
+- acceptance gate:
+  passed
+- tracer angular sweep `= 1.2134609954157165`
+- defect angular sweep `= 1.1579382202401192`
+- angular sweep error `= -0.05552277517559734`
+- normalized position RMS `= 0.042409239298342664`
+- normalized radius RMS `= 0.029611022720180742`
+- phase RMS `= 0.030474938997419522`
+- minimum boundary clearance `= 12.005080223083496`
+- mean coherence `= 0.9999983754268912`
+- mean higher-mode fraction `= 0.004773383962835164`
+- mean leakage `= 2.8372745574706763e-08`
+- mean compactness `= 1.1847734631494033`
+- mean continuity residual `= 1.3309467414563352e-04`
+
+Interpretation:
+
+- This is the first clean orbit-relevant `256^3` control on the current static pure-Kepler branch.
+- The no-dressing defect tracks the matched point tracer well enough over a finite arc to pass every currently declared short-arc gate.
+- The printed coherence near `0.999998` is now clearly interpretable as a genuine integrity signal rather than a misleading isolated metric, because the COM / phase / radius tracking gates also passed.
+- That means the remaining high-value discriminator is no longer basic launch stability or defect breakup.
+- The next run should be the matched `source_with_dressing` short arc from the same relaxed checkpoint, so the comparison isolates the adiabatic dressing response rather than setup noise.
+
+### Run 019: `256^3` tracer-matched short-arc, with dressing enabled
+
+- Command:
+  `OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 PYTHONUNBUFFERED=1 python -m src.scripts.run_short_arc_static_background --config configs/local/exp02_shortarc_256_restart.json --scenario source_with_dressing`
+- Output directory:
+  `outputs/runs/exp02_shortarc_256_restart_source_with_dressing`
+- Status:
+  complete
+
+Result:
+
+- acceptance gate:
+  passed
+- tracer angular sweep `= 1.2134616440216153`
+- defect angular sweep `= 1.1578454074393119`
+- angular sweep error `= -0.05561623658230341`
+- normalized position RMS `= 0.04247105442193567`
+- normalized radius RMS `= 0.029650197255636845`
+- phase RMS `= 0.030524493135500208`
+- minimum boundary clearance `= 12.00507926940918`
+- mean coherence `= 0.9999978466089382`
+- mean higher-mode fraction `= 0.004785304788911585`
+- mean leakage `= 2.8533020375713522e-08`
+- mean compactness `= 1.1843230294626812`
+- mean continuity residual `= 1.3324045920109546e-04`
+
+Direct comparison against Run 018 (`with_dressing - no_dressing`):
+
+- defect angular sweep `= -9.2812800807307e-05`
+- angular sweep error `= -9.34614067060746e-05`
+- normalized position RMS `= +6.18151235930037e-05`
+- normalized radius RMS `= +3.91745354561025e-05`
+- phase RMS `= +4.9554138080686e-05`
+- mean coherence `= -5.28817952982763e-07`
+- mean higher-mode fraction `= +1.19208260764211e-05`
+- mean leakage `= +1.60274801006759e-10`
+- mean compactness `= -4.50433686722151e-04`
+- mean continuity residual `= +1.45785055461942e-07`
+
+Interpretation:
+
+- The dressed run is just as clean as the no-dressing control.
+- Over this short arc, the measured COM / phase / radius differences are extremely small.
+- On the current reduced static-background branch, enabling the adiabatic dressing response does not produce a materially distinct short-arc trajectory at this resolution and window length.
+- That is not yet a falsification of any longer-orbit claim, because a tiny effect could still accumulate over much longer arcs.
+- But it does mean the short-arc discriminator has now done its job:
+  setup noise is under control, and the current dressing implementation appears either weak or practically invisible on this timescale.
+
+### Run 020: ODE Newtonian orbit reference
+
+- Command:
+  `python -m src.ode.newtonian_orbit --config configs/local/ode_newtonian_reference.json`
+- Output directory:
+  `outputs/runs/ode_newtonian_reference`
+- Status:
+  complete
+
+Result:
+
+- `delta_phi = -1.381192e-04`
+- `beta_eff = -2.658986e-02`
+- `periapse_count = 6`
+- maximum relative orbital-energy drift `= 3.771268e-08`
+- maximum relative angular-momentum drift `= 1.511823e-14`
+
+Interpretation:
+
+- The shared orbit-analysis / periapsis / fit pipeline now has a clean Newtonian ODE baseline.
+- The extracted precession is consistent with zero at the level needed for current PDE interpretation work.
+- Conservation quality is excellent, so the ODE reference is numerically much cleaner than any foreseeable PDE orbit run.
+- This does **not** prove the PDE grid will not wobble.
+- It does prove that the current fitter and orbit-summary machinery are not creating a large fake precession signal on their own.
+- The next Newtonian gate remains a long-window PDE bound orbit with no dressing, compared against this ODE baseline.
+
+### Run 021: PDE Newtonian bound-orbit branch wiring
+
+- New experiment entry point:
+  `src/experiments/exp03_pde_newtonian_bound_orbit.py`
+- Long-run config:
+  `configs/local/exp03_newtonian_bound_orbit_256_restart.json`
+- Manual wrapper:
+  `scripts/run_exp03_newtonian_bound_orbit_256_restart.sh`
+- Shared additions:
+  - `src/physics/newtonian_orbit_gate.py`
+  - `src/physics/pde_orbit_runtime.py`
+  - `docs/run_matrix.md`
+  - `docs/analysis_pipeline.md`
+
+Current status:
+
+- full test suite passes after the new long-orbit branch was added
+- a `256^3` smoke verification run is active from the saved relaxed checkpoint:
+  `python -m src.experiments.exp03_pde_newtonian_bound_orbit --config configs/local/exp03_newtonian_bound_orbit_smoke.json`
+
+Interpretation:
+
+- The next serious Newtonian gate is now implemented, not just planned.
+- The remaining open question is runtime / stability on the real `256^3` PDE branch over a long enough window to extract several periapses and compare against the ODE zero-drift baseline.

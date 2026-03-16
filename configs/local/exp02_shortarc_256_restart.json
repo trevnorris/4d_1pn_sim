@@ -1,0 +1,91 @@
+{
+  "run_name": "exp02_shortarc_256_restart",
+  "seed": 1234,
+  "device": "cuda_if_available",
+  "dtype": "float32",
+  "complex_dtype": "complex64",
+  "output_dir": "outputs/runs/exp02_shortarc_256_restart",
+  "overwrite_output": true,
+  "restart_relaxed": "outputs/runs/exp02_shortarc_256/checkpoint_relaxed.npz",
+  "grid": {
+    "shape": [256, 256, 256],
+    "length": [48.0, 48.0, 48.0]
+  },
+  "hermite": {
+    "num_modes": 4,
+    "lambda_w": 1.25,
+    "quadrature_order": 20
+  },
+  "eos": {
+    "K_eos": 0.08,
+    "n": 5.0
+  },
+  "geometry": {
+    "lambda_aspect": 3.0,
+    "reference_rho": 1.0,
+    "reference_a": 1.1,
+    "reference_energy_scale": 1.0
+  },
+  "solver": {
+    "mass": 1.0,
+    "kinetic_prefactor": 0.5,
+    "transverse_prefactor": 0.2,
+    "trap_strength_r": 1.4,
+    "trap_strength_w": 0.9,
+    "dt": 0.015,
+    "checkpoint_every": 0,
+    "progress_every": 128
+  },
+  "initializer": {
+    "imaginary_dt": 0.008,
+    "steps": 320,
+    "target_norm": 1.0,
+    "gaussian_width": 1.1
+  },
+  "background": {
+    "profile": "pure_kepler",
+    "mu": 6.0,
+    "softening_length": 0.0,
+    "core_radius": 0.05,
+    "center": [0.0, 0.0, 0.0],
+    "c_eff": 24.0,
+    "density_coupling": 1.0
+  },
+  "experiment": {
+    "periapsis_radius": 12.0,
+    "eccentricity": 0.05,
+    "velocity_scale": 1.0,
+    "orbit_steps": 1536,
+    "fit_start_index": 0,
+    "turning_point_min_spacing": 1,
+    "turning_point_smooth_window": 1,
+    "bound_radius_factor": 2.25,
+    "beta_tolerance": 0.5,
+    "higher_mode_threshold": 0.01,
+    "coherence_threshold": 0.995
+  },
+  "launch_calibration": {
+    "enabled": true,
+    "probe_steps": 128,
+    "measure_start_step": 16,
+    "measure_end_step": 80,
+    "safe_nyquist_fraction": 0.65,
+    "velocity_scale_samples": [0.9, 0.95, 1.0, 1.05, 1.1]
+  },
+  "short_arc": {
+    "scenario": "source_no_dressing",
+    "compare_start_step": 32,
+    "compare_end_step": 1408,
+    "metric_stride": 16,
+    "continuity_stride": 64,
+    "min_angular_sweep": 1.0,
+    "max_angular_sweep_error": 0.12,
+    "max_normalized_position_rms": 0.08,
+    "max_normalized_radius_rms": 0.04,
+    "max_phase_rms": 0.08,
+    "min_boundary_clearance": 8.0,
+    "min_coherence": 0.995,
+    "max_higher_mode_fraction": 0.01,
+    "max_leakage": 1e-6
+  }
+}

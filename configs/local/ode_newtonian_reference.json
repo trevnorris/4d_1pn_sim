@@ -1,0 +1,31 @@
+{
+  "run_name": "ode_newtonian_reference",
+  "seed": 1234,
+  "output_dir": "outputs/runs/ode_newtonian_reference",
+  "overwrite_output": true,
+  "solver": {
+    "dt": 0.02
+  },
+  "geometry": {
+    "reference_rho": 1.0
+  },
+  "background": {
+    "profile": "pure_kepler",
+    "mu": 6.0,
+    "softening_length": 0.0,
+    "core_radius": 0.05,
+    "center": [0.0, 0.0, 0.0],
+    "c_eff": 24.0,
+    "density_coupling": 1.0
+  },
+  "experiment": {
+    "periapsis_radius": 12.0,
+    "eccentricity": 0.05,
+    "velocity_scale": 1.0,
+    "orbit_steps": 36000,
+    "fit_start_index": 1000,
+    "turning_point_min_spacing": 1,
+    "turning_point_smooth_window": 9,
+    "turning_point_prominence_fraction": 0.02
+  }
+}
