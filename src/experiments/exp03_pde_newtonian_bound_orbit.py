@@ -106,6 +106,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     progress_every = int(config["solver"].get("progress_every", max(checkpoint_every, 256) if checkpoint_every > 0 else 256))
     metric_stride = int(config["experiment"].get("metric_stride", 16))
     continuity_stride = int(config["experiment"].get("continuity_stride", 64))
+    continuity_sampling_enabled = continuity_stride > 0
     dt = float(config["solver"]["dt"])
     steps = int(config["experiment"]["orbit_steps"])
     runtime_abort_config = dict(config.get("runtime_abort", {}))
@@ -117,7 +118,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         int(runtime_abort_config.get("required_consecutive_failures", 1)),
     )
     runtime_abort_thresholds = {
-        key: float(value)
+        key: (None if value is None else float(value))
         for key, value in runtime_abort_config.items()
         if key
         not in {
@@ -209,7 +210,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             and state.step % runtime_abort_check_stride == 0
             and coherence_history
             and higher_mode_history
-            and leakage_history
+            and (leakage_history or not continuity_sampling_enabled)
         ):
             partial_time = np.asarray(defect_time, dtype=np.float64)
             partial_positions = np.asarray(defect_positions, dtype=np.float64)
@@ -228,7 +229,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
                     "mean_higher_mode_fraction": float(higher_mode_history[-1]),
                 },
                 continuity_metrics={
-                    "mean_leakage": float(leakage_history[-1]),
+                    "mean_leakage": (float(leakage_history[-1]) if leakage_history else None),
                 },
                 min_boundary_clearance=float(min(boundary_clearance_history)),
                 thresholds=runtime_abort_thresholds,
@@ -337,11 +338,15 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             window_start_time,
             window_end_time,
         ),
-        "mean_leakage": window_mean(
-            np.asarray(leakage_history, dtype=np.float64),
-            continuity_sample_times_array,
-            window_start_time,
-            window_end_time,
+        "mean_leakage": (
+            window_mean(
+                np.asarray(leakage_history, dtype=np.float64),
+                continuity_sample_times_array,
+                window_start_time,
+                window_end_time,
+            )
+            if continuity_sampling_enabled
+            else None
         ),
         "mean_compactness": window_mean(
             np.asarray(compactness_history, dtype=np.float64),
@@ -349,14 +354,19 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             window_start_time,
             window_end_time,
         ),
-        "mean_continuity_residual": window_mean(
-            np.asarray(continuity_history, dtype=np.float64),
-            continuity_sample_times_array,
-            window_start_time,
-            window_end_time,
+        "mean_continuity_residual": (
+            window_mean(
+                np.asarray(continuity_history, dtype=np.float64),
+                continuity_sample_times_array,
+                window_start_time,
+                window_end_time,
+            )
+            if continuity_sampling_enabled
+            else None
         ),
         "metric_stride": int(metric_stride),
         "continuity_stride": int(continuity_stride),
+        "continuity_sampling_enabled": bool(continuity_sampling_enabled),
         "metric_sample_count": int(metric_sample_times_array.size),
         "continuity_sample_count": int(continuity_sample_times_array.size),
         "min_boundary_clearance": float(np.min(np.asarray(boundary_clearance_history, dtype=np.float64)))
@@ -369,7 +379,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     newtonian_gate = evaluate_newtonian_orbit_gate(
         orbit_summary=orbit_summary,
         defect_metrics=defect_metrics,
-        thresholds={key: float(value) for key, value in config["newtonian_gate"].items()},
+        thresholds={key: (None if value is None else float(value)) for key, value in config["newtonian_gate"].items()},
         fit_error=fit_error,
     )
 
@@ -441,7 +451,11 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         f"- max relative angular-momentum drift = {orbit_summary['angular_momentum_z_summary']['max_rel_drift']:.6e}",
         f"- mean coherence = {defect_metrics['mean_coherence']:.6f}",
         f"- mean higher-mode fraction = {defect_metrics['mean_higher_mode_fraction']:.6e}",
-        f"- mean leakage = {defect_metrics['mean_leakage']:.6e}",
+        (
+            f"- mean leakage = {defect_metrics['mean_leakage']:.6e}"
+            if defect_metrics["mean_leakage"] is not None
+            else "- mean leakage = n/a (continuity sampling disabled)"
+        ),
         f"- min boundary clearance = {defect_metrics['min_boundary_clearance']:.6f}",
     ]
     (output_path / "plain_language_summary.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")

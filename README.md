@@ -110,6 +110,7 @@ Recommended next cloud-GPU branch:
 - The long `exp03` restart configs now include a runtime abort guard. If effective COM drift, defect integrity, or boundary clearance go decisively off-rail, the run stops early and still writes `summary.json` plus `plain_language_summary.txt`.
 - The current long-orbit restart configs reuse the saved relaxed checkpoint at `outputs/runs/exp02_shortarc_256/checkpoint_relaxed.npz` to avoid repeating the most expensive setup stage.
 - The current recommended cloud branch is `320^3` with `L = 60`, run first as a guarded smoke path and then as a restart from the smoke run's `checkpoint_relaxed.npz`.
+- On the `320^3` branch, continuity/leakage sampling is intentionally disabled (`continuity_stride = 0`) because the full `currents()` diagnostic OOMs on an A40 even though the main evolution fits. The runtime abort still uses energy drift, angular-momentum drift, coherence, higher-mode fraction, and boundary clearance.
 
 ## Documentation
 

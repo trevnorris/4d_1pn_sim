@@ -89,3 +89,31 @@ def test_runtime_abort_check_triggers_on_nonfinite_metrics() -> None:
 
     assert check["triggered"]
     assert "finite_metrics" in check["failed_gates"]
+
+
+def test_runtime_abort_check_skips_leakage_when_threshold_disabled() -> None:
+    check = evaluate_runtime_abort_check(
+        conservation_summary={
+            "orbital_energy_summary": {"max_rel_drift": 0.03},
+            "angular_momentum_z_summary": {"max_rel_drift": 0.02},
+        },
+        light_metrics={
+            "mean_coherence": 0.999,
+            "mean_higher_mode_fraction": 0.004,
+        },
+        continuity_metrics={
+            "mean_leakage": None,
+        },
+        min_boundary_clearance=11.5,
+        thresholds={
+            "max_rel_energy_drift": 0.12,
+            "max_rel_angular_momentum_drift": 0.08,
+            "min_coherence": 0.99,
+            "max_higher_mode_fraction": 0.02,
+            "max_leakage": None,
+            "min_boundary_clearance": 8.0,
+        },
+    )
+
+    assert not check["triggered"]
+    assert check["gates"]["max_leakage"] is True

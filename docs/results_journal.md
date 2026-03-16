@@ -959,6 +959,7 @@ Branch rationale:
 - move the periapsis radius to `r_p = 16`
 - keep the same low eccentricity `e = 0.05`
 - retain the runtime abort guard so cloud runs still stop early if effective COM drift remains unacceptable
+- disable continuity/leakage sampling on this branch because the full `currents()` diagnostic OOMs on an A40 even when the main evolution itself fits comfortably
 
 Expected resource note:
 

@@ -3,10 +3,18 @@ from __future__ import annotations
 from typing import Any
 
 
+def _optional_max_gate(value: float | None, threshold: float | None) -> bool:
+    if threshold is None:
+        return True
+    if value is None:
+        return False
+    return float(value) <= float(threshold)
+
+
 def evaluate_newtonian_orbit_gate(
     orbit_summary: dict[str, Any],
-    defect_metrics: dict[str, float],
-    thresholds: dict[str, float],
+    defect_metrics: dict[str, float | None],
+    thresholds: dict[str, float | None],
     fit_error: str | None = None,
 ) -> dict[str, Any]:
     fit_available = fit_error is None
@@ -32,7 +40,7 @@ def evaluate_newtonian_orbit_gate(
         "min_coherence": float(defect_metrics["mean_coherence"]) >= float(thresholds["min_coherence"]),
         "max_higher_mode_fraction": float(defect_metrics["mean_higher_mode_fraction"])
         <= float(thresholds["max_higher_mode_fraction"]),
-        "max_leakage": float(defect_metrics["mean_leakage"]) <= float(thresholds["max_leakage"]),
+        "max_leakage": _optional_max_gate(defect_metrics.get("mean_leakage"), thresholds.get("max_leakage")),
     }
     return {
         "passes": bool(all(gates.values())),

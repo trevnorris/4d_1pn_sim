@@ -61,7 +61,7 @@
     "turning_point_smooth_window": 9,
     "turning_point_prominence_fraction": 0.02,
     "metric_stride": 16,
-    "continuity_stride": 64
+    "continuity_stride": 0
   },
   "launch_calibration": {
     "enabled": true,
@@ -78,7 +78,7 @@
     "max_rel_angular_momentum_drift": 0.05,
     "min_coherence": 0.995,
     "max_higher_mode_fraction": 0.01,
-    "max_leakage": 1e-6
+    "max_leakage": null
   },
   "runtime_abort": {
     "enabled": true,
@@ -89,7 +89,7 @@
     "max_rel_angular_momentum_drift": 0.08,
     "min_coherence": 0.99,
     "max_higher_mode_fraction": 0.02,
-    "max_leakage": 5e-6,
+    "max_leakage": null,
     "min_boundary_clearance": 10.0
   }
 }
