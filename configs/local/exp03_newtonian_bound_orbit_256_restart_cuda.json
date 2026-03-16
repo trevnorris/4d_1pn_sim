@@ -79,5 +79,17 @@
     "min_coherence": 0.995,
     "max_higher_mode_fraction": 0.01,
     "max_leakage": 1e-6
+  },
+  "runtime_abort": {
+    "enabled": true,
+    "check_stride": 256,
+    "min_steps_before_check": 512,
+    "required_consecutive_failures": 2,
+    "max_rel_energy_drift": 0.12,
+    "max_rel_angular_momentum_drift": 0.08,
+    "min_coherence": 0.99,
+    "max_higher_mode_fraction": 0.02,
+    "max_leakage": 5e-6,
+    "min_boundary_clearance": 8.0
   }
 }

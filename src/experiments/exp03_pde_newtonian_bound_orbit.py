@@ -22,6 +22,7 @@ from src.physics.pde_orbit_runtime import (
     sample_light_metrics,
     window_mean,
 )
+from src.physics.runtime_abort import boundary_clearance, evaluate_runtime_abort_check
 
 
 def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> Path:
@@ -107,6 +108,25 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     continuity_stride = int(config["experiment"].get("continuity_stride", 64))
     dt = float(config["solver"]["dt"])
     steps = int(config["experiment"]["orbit_steps"])
+    runtime_abort_config = dict(config.get("runtime_abort", {}))
+    runtime_abort_enabled = bool(runtime_abort_config.get("enabled", False))
+    runtime_abort_check_stride = int(runtime_abort_config.get("check_stride", max(metric_stride, continuity_stride, 1)))
+    runtime_abort_min_steps = int(runtime_abort_config.get("min_steps_before_check", runtime_abort_check_stride))
+    runtime_abort_required_consecutive_failures = max(
+        1,
+        int(runtime_abort_config.get("required_consecutive_failures", 1)),
+    )
+    runtime_abort_thresholds = {
+        key: float(value)
+        for key, value in runtime_abort_config.items()
+        if key
+        not in {
+            "enabled",
+            "check_stride",
+            "min_steps_before_check",
+            "required_consecutive_failures",
+        }
+    }
 
     defect_positions: list[list[float]] = []
     defect_time: list[float] = []
@@ -117,7 +137,24 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     continuity_sample_times: list[float] = []
     leakage_history: list[float] = []
     continuity_history: list[float] = []
+    boundary_clearance_history: list[float] = []
     final_snapshot: dict[str, Any] | None = None
+    completed_steps = 0
+    runtime_abort_check_count = 0
+    consecutive_abort_failures = 0
+    runtime_abort_summary: dict[str, Any] = {
+        "enabled": runtime_abort_enabled,
+        "triggered": False,
+        "check_stride": runtime_abort_check_stride,
+        "min_steps_before_check": runtime_abort_min_steps,
+        "required_consecutive_failures": runtime_abort_required_consecutive_failures,
+        "check_count": 0,
+        "failed_checks": 0,
+        "last_check": None,
+        "trigger_step": None,
+        "trigger_time": None,
+        "triggered_by": [],
+    }
 
     previous_continuity_snapshot: dict[str, Any] | None = None
     print("[exp03] stage=evolve start", flush=True)
@@ -132,6 +169,8 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         defect_time.append(float(state.time))
         current_center = solver.estimate_defect_center(state.psi_modes).detach().cpu().numpy()
         defect_positions.append(current_center.tolist())
+        current_boundary_clearance = boundary_clearance(current_center, solver.grid.length)
+        boundary_clearance_history.append(current_boundary_clearance)
 
         if metric_stride > 0 and ((idx + 1) % metric_stride == 0 or idx == steps - 1):
             light_metrics = sample_light_metrics(
@@ -163,6 +202,66 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             leakage_history.append(float(continuity_metrics["mean_leakage"]))
             continuity_history.append(float(continuity_metrics["mean_continuity_residual"]))
 
+        if (
+            runtime_abort_enabled
+            and state.step >= runtime_abort_min_steps
+            and runtime_abort_check_stride > 0
+            and state.step % runtime_abort_check_stride == 0
+            and coherence_history
+            and higher_mode_history
+            and leakage_history
+        ):
+            partial_time = np.asarray(defect_time, dtype=np.float64)
+            partial_positions = np.asarray(defect_positions, dtype=np.float64)
+            conservation_check = summarize_effective_orbit_conservation(
+                time=partial_time,
+                positions=partial_positions,
+                source_center=background.center,
+                potential_fn=background.potential_at_position,
+                mu=background.mu,
+                fit_start_index=0,
+            )
+            abort_check = evaluate_runtime_abort_check(
+                conservation_summary=conservation_check,
+                light_metrics={
+                    "mean_coherence": float(coherence_history[-1]),
+                    "mean_higher_mode_fraction": float(higher_mode_history[-1]),
+                },
+                continuity_metrics={
+                    "mean_leakage": float(leakage_history[-1]),
+                },
+                min_boundary_clearance=float(min(boundary_clearance_history)),
+                thresholds=runtime_abort_thresholds,
+            )
+            runtime_abort_check_count += 1
+            runtime_abort_summary["check_count"] = runtime_abort_check_count
+            runtime_abort_summary["last_check"] = {
+                "step": int(state.step),
+                "time": float(state.time),
+                **abort_check,
+            }
+            if abort_check["triggered"]:
+                consecutive_abort_failures += 1
+                runtime_abort_summary["failed_checks"] = runtime_abort_summary["failed_checks"] + 1
+            else:
+                consecutive_abort_failures = 0
+            if consecutive_abort_failures >= runtime_abort_required_consecutive_failures:
+                runtime_abort_summary.update(
+                    {
+                        "triggered": True,
+                        "trigger_step": int(state.step),
+                        "trigger_time": float(state.time),
+                        "triggered_by": list(abort_check["failed_gates"]),
+                    }
+                )
+                print(
+                    f"[exp03] stage=evolve early_abort step={state.step} time={state.time:.3f} "
+                    f"failed={','.join(abort_check['failed_gates'])}",
+                    flush=True,
+                )
+                completed_steps = idx + 1
+                break
+
         if checkpoint_every > 0 and state.step % checkpoint_every == 0:
             save_checkpoint(
                 output_path / f"checkpoint_step_{state.step:05d}.npz",
@@ -182,6 +281,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
                 f"radius={radius:.6f} coherence={coherence_value:.6f}",
                 flush=True,
             )
+        completed_steps = idx + 1
     print(f"[exp03] stage=evolve done elapsed_s={time.monotonic() - evolve_start:.2f}", flush=True)
 
     defect_time_array = np.asarray(defect_time, dtype=np.float64)
@@ -259,6 +359,12 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         "continuity_stride": int(continuity_stride),
         "metric_sample_count": int(metric_sample_times_array.size),
         "continuity_sample_count": int(continuity_sample_times_array.size),
+        "min_boundary_clearance": float(np.min(np.asarray(boundary_clearance_history, dtype=np.float64)))
+        if boundary_clearance_history
+        else 0.0,
+        "mean_boundary_clearance": float(np.mean(np.asarray(boundary_clearance_history, dtype=np.float64)))
+        if boundary_clearance_history
+        else 0.0,
     }
     newtonian_gate = evaluate_newtonian_orbit_gate(
         orbit_summary=orbit_summary,
@@ -288,6 +394,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         mean_S_leak=np.asarray(leakage_history, dtype=np.float64),
         radius_of_gyration=np.asarray(compactness_history, dtype=np.float64),
         continuity_residual_l2=np.asarray(continuity_history, dtype=np.float64),
+        boundary_clearance=np.asarray(boundary_clearance_history, dtype=np.float64),
     )
 
     summary = {
@@ -304,6 +411,9 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         "orbit_summary": orbit_summary,
         "defect_metrics": defect_metrics,
         "newtonian_gate": newtonian_gate,
+        "runtime_abort": runtime_abort_summary,
+        "completed_steps": int(completed_steps),
+        "requested_steps": int(steps),
         "final_snapshot": final_snapshot,
         "assumptions": [
             "This run uses the imposed static analytic background with fixed ambient density rho0 and no dressing response.",
@@ -317,6 +427,13 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     lines = [
         "Experiment 3 PDE Newtonian bound-orbit summary:",
         f"- defect applied speed = {applied_speed:.6f}",
+        f"- completed steps = {completed_steps} / {steps}",
+        f"- runtime abort triggered = {runtime_abort_summary['triggered']}",
+        (
+            f"- runtime abort gates = {', '.join(runtime_abort_summary['triggered_by'])}"
+            if runtime_abort_summary["triggered"]
+            else f"- runtime abort checks = {runtime_abort_summary['check_count']}"
+        ),
         f"- newtonian gate pass = {newtonian_gate['passes']}",
         f"- fit error = {fit_error}" if fit_error is not None else f"- beta_eff = {orbit_summary['beta_eff']:.6e}",
         f"- periapse count = {orbit_summary.get('periapse_count', 0)}",
@@ -325,6 +442,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         f"- mean coherence = {defect_metrics['mean_coherence']:.6f}",
         f"- mean higher-mode fraction = {defect_metrics['mean_higher_mode_fraction']:.6e}",
         f"- mean leakage = {defect_metrics['mean_leakage']:.6e}",
+        f"- min boundary clearance = {defect_metrics['min_boundary_clearance']:.6f}",
     ]
     (output_path / "plain_language_summary.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (output_path / "unresolved_assumptions.txt").write_text("\n".join(summary["assumptions"]) + "\n", encoding="utf-8")
@@ -339,6 +457,7 @@ def main() -> None:
 
     output_path = run(config_path=args.config, restart_relaxed=args.restart_relaxed)
     summary = load_json_config(Path(output_path) / "summary.json")
+    print(f"runtime_abort_triggered: {summary['runtime_abort']['triggered']}")
     print(f"newtonian_gate_pass: {summary['newtonian_gate']['passes']}")
     print(f"fit_error: {summary['orbit_summary'].get('fit_error')}")
     print(f"max_rel_energy_drift: {summary['orbit_summary']['orbital_energy_summary']['max_rel_drift']:.6e}")

@@ -74,5 +74,8 @@
     "min_coherence": 0.995,
     "max_higher_mode_fraction": 0.01,
     "max_leakage": 1e-6
+  },
+  "runtime_abort": {
+    "enabled": false
   }
 }
