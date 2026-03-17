@@ -26,4 +26,4 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the guarded `320^3 / L=60` Newtonian `sponge_only` velocity screen on GPU, testing `velocity_scale = 0.97` and `0.985` on top of the two best trap candidates `trap_strength_r = 0.125` and `0.15`.
+- Run the guarded `320^3 / L=60` Newtonian `sponge_only` narrow velocity refinement on the best trap branch `trap_strength_r = 0.125`, testing `velocity_scale = 0.975, 0.978, 0.981, 0.983` while using the completed `0.97` and `0.985` runs as anchors.

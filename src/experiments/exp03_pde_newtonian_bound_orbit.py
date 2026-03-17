@@ -43,6 +43,10 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     background = StaticCentralBackground.from_config(config["background"], rho_reference=rho0)
     background_potential = background.potential_field(solver.grid).to(solver.grid.real_dtype)
     dt = float(config["solver"]["dt"])
+    checkpoint_config = dict(config.get("checkpoints", {}))
+    save_relaxed_checkpoint = bool(checkpoint_config.get("save_relaxed", True))
+    save_inserted_checkpoint = bool(checkpoint_config.get("save_inserted", True))
+    save_final_checkpoint = bool(checkpoint_config.get("save_final", True))
     boundary_sponge_config = dict(config.get("boundary_sponge", {}))
     boundary_sponge_mask = None
     if bool(boundary_sponge_config.get("enabled", False)):
@@ -58,16 +62,17 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     else:
         print(f"[exp03] stage=load_relaxed checkpoint={relaxed_restart_path}", flush=True)
         relaxed_state = state_from_checkpoint(relaxed_restart_path, solver=solver)
-    save_checkpoint(
-        output_path / "checkpoint_relaxed.npz",
-        {
-            "psi_modes": relaxed_state.psi_modes,
-            "time": relaxed_state.time,
-            "step": relaxed_state.step,
-            "a": relaxed_state.a,
-            "rho_ambient": relaxed_state.rho_ambient,
-        },
-    )
+    if save_relaxed_checkpoint:
+        save_checkpoint(
+            output_path / "checkpoint_relaxed.npz",
+            {
+                "psi_modes": relaxed_state.psi_modes,
+                "time": relaxed_state.time,
+                "step": relaxed_state.step,
+                "a": relaxed_state.a,
+                "rho_ambient": relaxed_state.rho_ambient,
+            },
+        )
 
     print("[exp03] stage=launch_calibration start", flush=True)
     calibration_start = time.monotonic()
@@ -108,16 +113,17 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         shift=(start_radius, 0.0, 0.0),
         momentum=(0.0, solver.mass * applied_speed, 0.0),
     )
-    save_checkpoint(
-        output_path / "checkpoint_inserted.npz",
-        {
-            "psi_modes": state.psi_modes,
-            "time": state.time,
-            "step": state.step,
-            "a": state.a,
-            "rho_ambient": state.rho_ambient,
-        },
-    )
+    if save_inserted_checkpoint:
+        save_checkpoint(
+            output_path / "checkpoint_inserted.npz",
+            {
+                "psi_modes": state.psi_modes,
+                "time": state.time,
+                "step": state.step,
+                "a": state.a,
+                "rho_ambient": state.rho_ambient,
+            },
+        )
 
     reference_modes = state.psi_modes.clone()
     orbit_refill_controller = None
@@ -437,16 +443,17 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         fit_error=fit_error,
     )
 
-    save_checkpoint(
-        output_path / "checkpoint_final.npz",
-        {
-            "psi_modes": state.psi_modes,
-            "time": state.time,
-            "step": state.step,
-            "a": state.a,
-            "rho_ambient": state.rho_ambient,
-        },
-    )
+    if save_final_checkpoint:
+        save_checkpoint(
+            output_path / "checkpoint_final.npz",
+            {
+                "psi_modes": state.psi_modes,
+                "time": state.time,
+                "step": state.step,
+                "a": state.a,
+                "rho_ambient": state.rho_ambient,
+            },
+        )
     np.savez_compressed(
         output_path / "timeseries.npz",
         time=defect_time_array,
@@ -489,6 +496,11 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
                 if reservoir_refill_config
                 else {}
             ),
+        },
+        "checkpoint_artifacts": {
+            "save_relaxed": bool(save_relaxed_checkpoint),
+            "save_inserted": bool(save_inserted_checkpoint),
+            "save_final": bool(save_final_checkpoint),
         },
         "launch_calibration": calibration_summary,
         "orbit_summary": orbit_summary,

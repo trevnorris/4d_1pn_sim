@@ -138,12 +138,19 @@ Velocity screen on top of the best trap candidates:
 ./scripts/run_exp03_newtonian_bound_orbit_320_velocity_screen.sh
 ```
 
+Narrow velocity refinement on the best trap branch:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_320_velocity_refine_t0125.sh
+```
+
 ## Runtime guidance
 
 - The `256^3` long-orbit PDE branch is a serious run, not a quick local sanity check.
 - CPU runs can take many hours.
 - The CUDA wrapper is the intended fire-and-forget path for cloud GPUs because it performs a preflight check before starting the long job.
 - The long `exp03` restart configs now include a runtime abort guard. If effective COM drift, defect integrity, or boundary clearance go decisively off-rail, the run stops early and still writes `summary.json` plus `plain_language_summary.txt`.
+- Screening configs can now disable the large checkpoint artifacts and keep only `summary.json`, `plain_language_summary.txt`, `timeseries.npz`, and small JSON metadata. This is the intended low-disk mode for broad cloud sweeps.
 - The current long-orbit restart configs reuse the saved relaxed checkpoint at `outputs/runs/exp02_shortarc_256/checkpoint_relaxed.npz` to avoid repeating the most expensive setup stage.
 - The current recommended cloud branch is `320^3` with `L = 60`, using the promoted `sponge_only` protocol. Run it first as a guarded smoke path and then as a restart from the smoke run's `checkpoint_relaxed.npz`.
 - On the `320^3` branch, the full continuity residual diagnostic remains disabled (`continuity_stride = 0`) because `currents()` OOMs on an A40 even though the main evolution fits.

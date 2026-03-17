@@ -1279,3 +1279,57 @@ Purpose:
 - keep the best trap settings fixed,
 - reduce the launch speed slightly,
 - test whether a cooler orbit family improves both COM conservation and the coherence tradeoff.
+
+### Run 032: completed velocity screen and next refinement
+
+Completed velocity-screen results:
+
+- `trap_strength_r = 0.125`, `velocity_scale = 0.97`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 9.253230e-02`
+  - maximum relative angular-momentum drift `= 4.652886e-02`
+  - mean coherence `= 0.991749`
+  - radius drifts substantially inward by the end of the window
+- `trap_strength_r = 0.125`, `velocity_scale = 0.985`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 9.789584e-02`
+  - maximum relative angular-momentum drift `= 4.673891e-02`
+  - mean coherence `= 0.991765`
+  - radius stays above the target radius through most of the window
+- `trap_strength_r = 0.15`, `velocity_scale = 0.97`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 1.112396e-01`
+  - maximum relative angular-momentum drift `= 5.567251e-02`
+  - mean coherence `= 0.994771`
+- `trap_strength_r = 0.15`, `velocity_scale = 0.985`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 1.168828e-01`
+  - maximum relative angular-momentum drift `= 5.566299e-02`
+  - mean coherence `= 0.994783`
+
+Interpretation:
+
+- These are the best long-window orbit runs seen so far.
+- `trap_strength_r = 0.125` remains the stronger trap choice for conservation.
+- The `0.97` branch is too cool and drifts inward; the `0.985` branch is too hot and stays too far out.
+- The right next move is a denser in-between velocity scan on `trap_strength_r = 0.125`, not another trap sweep and not yet a production long run.
+
+Prepared next branch:
+
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_velocity_refine_t0125_v0975.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_velocity_refine_t0125_v0978.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_velocity_refine_t0125_v0981.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_velocity_refine_t0125_v0983.json`
+- `scripts/run_exp03_newtonian_bound_orbit_320_velocity_refine_t0125.sh`
+
+Purpose:
+
+- use the completed `0.97` and `0.985` runs as anchors,
+- avoid wasting cycles on the weaker `trap_strength_r = 0.15` branch,
+- narrow the usable launch speed before committing to a longer run.
+
+Operational note:
+
+- the prepared `0.125` velocity-refine configs disable the heavy `checkpoint_relaxed.npz`, `checkpoint_inserted.npz`, and `checkpoint_final.npz` artifacts,
+- they still write `summary.json`, `plain_language_summary.txt`, `timeseries.npz`, `config.json`, `runtime.json`, and `launch_calibration.json`,
+- this keeps the screen usable on smaller cloud volumes.
