@@ -1186,3 +1186,44 @@ Purpose:
 - refine the apparent sweet spot near `trap_strength_r = 0.2`,
 - keep the orbit family fixed so the screen remains a clean confinement audit,
 - defer any launch-velocity retune until the trap range is narrowed first.
+
+### Run 030: partial narrow-trap screen and next pivot
+
+Observed partial results while the narrow screen was still running:
+
+- `trap_strength_r = 0.15`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 1.168828e-01`
+  - maximum relative angular-momentum drift `= 5.566299e-02`
+  - mean coherence `= 0.994783`
+- `trap_strength_r = 0.20`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 1.547613e-01`
+  - maximum relative angular-momentum drift `= 7.338853e-02`
+  - mean coherence `= 0.997908`
+- `trap_strength_r = 0.25`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 1.927034e-01`
+  - maximum relative angular-momentum drift `= 9.088535e-02`
+  - mean coherence `= 0.999069`
+
+Interpretation:
+
+- `trap_strength_r = 0.15` is the best branch seen so far.
+- The tradeoff is now visible very clearly:
+  lower `trap_strength_r` improves COM/orbit conservation, while slightly weakening shape coherence.
+- The next refinement should therefore bracket the current best point more carefully rather than rerun `0.15` or spend cycles on obviously worse higher values.
+
+Prepared next branch:
+
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_refine_r005.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_refine_r010.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_refine_r0125.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_refine_r0175.json`
+- `scripts/run_exp03_newtonian_bound_orbit_320_trap_refine_screen.sh`
+
+Purpose:
+
+- avoid wasting a duplicate run at `0.15`,
+- test whether the optimum lies below `0.15`,
+- keep the launch target fixed until the low-trap sweet spot is mapped well enough to justify a velocity retune.
