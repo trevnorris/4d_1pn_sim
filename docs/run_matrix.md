@@ -26,4 +26,4 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the guarded `320^3 / L=60` Newtonian `sponge_only` lower-trap screen on GPU, testing `trap_strength_r = 0.2, 0.4, 0.6, 0.8` while keeping the same launch target and sponge settings.
+- Run the guarded `320^3 / L=60` Newtonian `sponge_only` narrow trap screen on GPU, testing `trap_strength_r = 0.15, 0.20, 0.25, 0.30` while keeping the same launch target and sponge settings.

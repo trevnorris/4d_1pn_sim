@@ -1146,3 +1146,43 @@ Purpose:
 - continue the same `sponge_only` / fixed-launch audit,
 - test whether the COM drift keeps improving as `trap_strength_r` moves below `0.8`,
 - avoid confounding the screen by changing the launch velocity or orbit family at the same time.
+
+### Run 029: partial `320^3` low-trap screen and pivot
+
+Observed partial results before the broad low-trap sweep finished:
+
+- `trap_strength_r = 0.2`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 1.547613e-01`
+  - maximum relative angular-momentum drift `= 7.338853e-02`
+  - mean coherence `= 0.997908`
+- `trap_strength_r = 0.4`
+  - runtime abort at `t = 41.28`
+  - maximum relative energy drift `= 2.052923e-01`
+  - maximum relative angular-momentum drift `= 9.726596e-02`
+  - mean coherence `= 0.999894`
+- `trap_strength_r = 0.6`
+  - runtime abort at `t = 29.76`
+  - maximum relative energy drift `= 2.197784e-01`
+  - maximum relative angular-momentum drift `= 1.046033e-01`
+  - mean coherence `= 0.999993`
+
+Interpretation:
+
+- `trap_strength_r = 0.2` is clearly the best branch seen so far.
+- The trend is monotone in the useful direction: weakening radial confinement improves the long-window orbit.
+- At the same time, the weakest tested branch shows the first noticeable coherence tradeoff, so the next step should refine around `0.2` rather than jump directly to a production restart or confound the test by changing launch velocity.
+
+Prepared next branch:
+
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_narrow_r015.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_low_r020.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_narrow_r025.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_narrow_r030.json`
+- `scripts/run_exp03_newtonian_bound_orbit_320_trap_narrow_screen.sh`
+
+Purpose:
+
+- refine the apparent sweet spot near `trap_strength_r = 0.2`,
+- keep the orbit family fixed so the screen remains a clean confinement audit,
+- defer any launch-velocity retune until the trap range is narrowed first.

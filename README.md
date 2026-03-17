@@ -120,6 +120,12 @@ Lower-trap follow-up screen for the same branch:
 ./scripts/run_exp03_newtonian_bound_orbit_320_trap_low_screen.sh
 ```
 
+Narrow refinement around the best current trap range:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_320_trap_narrow_screen.sh
+```
+
 ## Runtime guidance
 
 - The `256^3` long-orbit PDE branch is a serious run, not a quick local sanity check.
