@@ -1094,3 +1094,55 @@ Purpose:
 - hold the successful `sponge_only` protocol fixed,
 - vary only `trap_strength_r`,
 - test whether long-window COM drift is primarily driven by radial confinement strength rather than refill or boundary handling.
+
+### Run 028: `320^3` sponge-only trap-strength screen
+
+- Command:
+  `./scripts/run_exp03_newtonian_bound_orbit_320_trap_screen.sh`
+- Output directories:
+  - `outputs/runs/exp03_newtonian_bound_orbit_320_screen_trap_r080`
+  - `outputs/runs/exp03_newtonian_bound_orbit_320_screen_trap_r100`
+  - `outputs/runs/exp03_newtonian_bound_orbit_320_screen_trap_r120`
+  - `outputs/runs/exp03_newtonian_bound_orbit_320_screen_trap_r140`
+
+Key results:
+
+- `trap_strength_r = 0.8`
+  - abort at `t = 22.08`
+  - maximum relative energy drift `= 2.172462e-01`
+  - maximum relative angular-momentum drift `= 1.035153e-01`
+  - mean coherence `= 0.999999`
+- `trap_strength_r = 1.0`
+  - abort at `t = 18.24`
+  - maximum relative energy drift `= 2.234411e-01`
+  - maximum relative angular-momentum drift `= 1.066721e-01`
+  - mean coherence `= 0.999999`
+- `trap_strength_r = 1.2`
+  - abort at `t = 18.24`
+  - maximum relative energy drift `= 2.632672e-01`
+  - maximum relative angular-momentum drift `= 1.268087e-01`
+  - mean coherence `= 0.999999`
+- `trap_strength_r = 1.4`
+  - abort at `t = 14.40`
+  - maximum relative energy drift `= 2.440518e-01`
+  - maximum relative angular-momentum drift `= 1.171726e-01`
+  - mean coherence `= 1.000000`
+
+Interpretation:
+
+- Lowering the radial confinement strength clearly helps.
+- The defect remains healthy in all cases, so the dominant effect is COM/confinement coupling rather than breakup.
+- The best current branch is `trap_strength_r = 0.8`, and the monotone trend justifies pushing to still weaker radial confinement next.
+
+Prepared next branch:
+
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_low_r020.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_low_r040.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_trap_low_r060.json`
+- `scripts/run_exp03_newtonian_bound_orbit_320_trap_low_screen.sh`
+
+Purpose:
+
+- continue the same `sponge_only` / fixed-launch audit,
+- test whether the COM drift keeps improving as `trap_strength_r` moves below `0.8`,
+- avoid confounding the screen by changing the launch velocity or orbit family at the same time.
