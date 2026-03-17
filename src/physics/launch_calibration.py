@@ -19,6 +19,24 @@ def safe_launch_speed_limit(solver: MatterSplitStepSolver, nyquist_fraction: flo
     return safe_k / max(float(solver.mass), 1.0e-12)
 
 
+def calibration_velocity_scale_samples(
+    configured_samples: Sequence[float] | None,
+    *,
+    target_velocity_scale: float | None = None,
+    safe_scale_limit: float | None = None,
+) -> list[float]:
+    if configured_samples:
+        samples = [float(value) for value in configured_samples if float(value) > 0.0]
+    else:
+        safe_limit = 1.25 if safe_scale_limit is None else float(safe_scale_limit)
+        upper = max(min(1.25, safe_limit), 0.4)
+        samples = np.linspace(0.5, upper, 6, dtype=np.float64).tolist()
+    if target_velocity_scale is not None and float(target_velocity_scale) > 0.0:
+        samples.append(float(target_velocity_scale))
+    unique_samples = sorted({round(float(value), 12): float(value) for value in samples}.values())
+    return unique_samples
+
+
 def _measurement_window_bounds(num_samples: int, start_index: int, end_index: int | None) -> tuple[int, int]:
     upper = num_samples if end_index is None else min(int(end_index), num_samples)
     lower = max(int(start_index), 0)
@@ -187,18 +205,15 @@ def choose_best_launch_probe(
     return best_probe
 
 
-def summarize_launch_calibration(
-    probes: Sequence[dict[str, Any]],
-    target_speed: float,
-    safe_speed_limit: float,
-    boundary_clearance_floor: float | None = None,
-    radius_bias_tolerance_fraction: float = 0.02,
-) -> dict[str, Any]:
-    recommended = choose_best_launch_probe(probes, target_speed=target_speed)
-    max_realized = max(float(probe["velocity_summary"]["mean_tangential_speed"]) for probe in probes)
-    recommended_window = dict(recommended.get("window_summary", {}))
-    launch_radius = float(recommended.get("launch_radius", 0.0))
-    radius_bias = float(recommended.get("radius_bias", 0.0))
+def _probe_window_usable(
+    probe: dict[str, Any],
+    *,
+    boundary_clearance_floor: float | None,
+    radius_bias_tolerance_fraction: float,
+) -> bool:
+    recommended_window = dict(probe.get("window_summary", {}))
+    launch_radius = float(probe.get("launch_radius", 0.0))
+    radius_bias = float(probe.get("radius_bias", 0.0))
     within_radius_tolerance = True
     if launch_radius > 0.0:
         within_radius_tolerance = abs(radius_bias) <= float(radius_bias_tolerance_fraction) * launch_radius
@@ -208,6 +223,51 @@ def summarize_launch_calibration(
         sufficient_boundary_clearance = (
             float(recommended_window["min_boundary_clearance"]) >= float(boundary_clearance_floor)
         )
+    return bool(within_radius_tolerance and sufficient_boundary_clearance)
+
+
+def find_launch_probe_for_speed(
+    probes: Sequence[dict[str, Any]],
+    target_speed: float,
+    *,
+    rel_tol: float = 1.0e-9,
+    abs_tol: float = 1.0e-12,
+) -> dict[str, Any] | None:
+    for probe in probes:
+        if math.isclose(float(probe["applied_speed"]), float(target_speed), rel_tol=rel_tol, abs_tol=abs_tol):
+            return probe
+    return None
+
+
+def summarize_launch_calibration(
+    probes: Sequence[dict[str, Any]],
+    target_speed: float,
+    safe_speed_limit: float,
+    boundary_clearance_floor: float | None = None,
+    radius_bias_tolerance_fraction: float = 0.02,
+) -> dict[str, Any]:
+    recommended = choose_best_launch_probe(probes, target_speed=target_speed)
+    target_probe = find_launch_probe_for_speed(probes, target_speed=target_speed)
+    max_realized = max(float(probe["velocity_summary"]["mean_tangential_speed"]) for probe in probes)
+    recommended_window = dict(recommended.get("window_summary", {}))
+    launch_radius = float(recommended.get("launch_radius", 0.0))
+    radius_bias = float(recommended.get("radius_bias", 0.0))
+    recommended_window_usable = _probe_window_usable(
+        recommended,
+        boundary_clearance_floor=boundary_clearance_floor,
+        radius_bias_tolerance_fraction=radius_bias_tolerance_fraction,
+    )
+    target_probe_window_usable = None
+    target_probe_velocity_summary = None
+    target_probe_window_summary = None
+    if target_probe is not None:
+        target_probe_window_usable = _probe_window_usable(
+            target_probe,
+            boundary_clearance_floor=boundary_clearance_floor,
+            radius_bias_tolerance_fraction=radius_bias_tolerance_fraction,
+        )
+        target_probe_velocity_summary = dict(target_probe["velocity_summary"])
+        target_probe_window_summary = dict(target_probe.get("window_summary", {}))
     return {
         "target_speed": float(target_speed),
         "safe_speed_limit": float(safe_speed_limit),
@@ -219,7 +279,11 @@ def summarize_launch_calibration(
         "recommended_window_summary": recommended_window,
         "max_realized_tangential_speed": float(max_realized),
         "target_reachable": bool(max_realized >= 0.98 * target_speed),
-        "recommended_window_usable": bool(within_radius_tolerance and sufficient_boundary_clearance),
+        "recommended_window_usable": recommended_window_usable,
+        "target_probe_available": bool(target_probe is not None),
+        "target_probe_window_usable": target_probe_window_usable,
+        "target_probe_velocity_summary": target_probe_velocity_summary,
+        "target_probe_window_summary": target_probe_window_summary,
         "boundary_clearance_floor": None if boundary_clearance_floor is None else float(boundary_clearance_floor),
         "radius_bias_tolerance_fraction": float(radius_bias_tolerance_fraction),
         "probes": [
@@ -235,4 +299,32 @@ def summarize_launch_calibration(
             }
             for probe in probes
         ],
+    }
+
+
+def resolve_launch_speed(
+    calibration_summary: dict[str, Any] | None,
+    *,
+    target_speed: float,
+) -> dict[str, Any]:
+    if calibration_summary is None:
+        return {
+            "applied_speed": float(target_speed),
+            "selection": "target_without_calibration",
+            "velocity_summary": None,
+        }
+    safe_speed_limit = float(calibration_summary["safe_speed_limit"])
+    target_probe_available = bool(calibration_summary.get("target_probe_available", False))
+    target_probe_window_usable = calibration_summary.get("target_probe_window_usable")
+    target_safe = float(target_speed) <= safe_speed_limit + 1.0e-12
+    if target_safe and target_probe_available and bool(target_probe_window_usable):
+        return {
+            "applied_speed": float(target_speed),
+            "selection": "target_probe",
+            "velocity_summary": calibration_summary.get("target_probe_velocity_summary"),
+        }
+    return {
+        "applied_speed": float(calibration_summary["recommended_applied_speed"]),
+        "selection": "recommended_probe",
+        "velocity_summary": calibration_summary.get("recommended_velocity_summary"),
     }

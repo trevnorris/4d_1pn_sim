@@ -16,7 +16,9 @@ from src.physics.background_sources import StaticCentralBackground
 from src.physics.defects import displace_and_boost_state
 from src.physics.diagnostics import snapshot_diagnostics, summarize_orbit_run
 from src.physics.launch_calibration import (
+    calibration_velocity_scale_samples,
     probe_launch_response,
+    resolve_launch_speed,
     safe_launch_speed_limit,
     summarize_launch_calibration,
 )
@@ -76,12 +78,12 @@ def run(config_path: str | Path, restart: str | None = None) -> Path:
             safe_speed = safe_launch_speed_limit(solver, nyquist_fraction=safe_fraction)
             boundary_clearance_floor = 3.0 * max(float(dx) for dx in solver.grid.dx)
             base_speed = background.periapsis_speed(periapsis_radius, eccentricity)
-            configured_scales = calibration_config.get("velocity_scale_samples")
-            if configured_scales:
-                sampled_scales = [float(value) for value in configured_scales if float(value) > 0.0]
-            else:
-                safe_scale_limit = safe_speed / max(base_speed, 1.0e-12)
-                sampled_scales = np.linspace(0.5, max(min(1.25, safe_scale_limit), 0.4), 6, dtype=np.float64).tolist()
+            safe_scale_limit = safe_speed / max(base_speed, 1.0e-12)
+            sampled_scales = calibration_velocity_scale_samples(
+                calibration_config.get("velocity_scale_samples"),
+                target_velocity_scale=float(config["experiment"].get("velocity_scale", 1.0)),
+                safe_scale_limit=safe_scale_limit,
+            )
 
             calibration_probes = []
             for velocity_scale in sampled_scales:
@@ -125,7 +127,9 @@ def run(config_path: str | Path, restart: str | None = None) -> Path:
                     }
                 )
                 dump_json(output_dir / "launch_calibration.json", launch_calibration_summary)
-                initial_speed = float(launch_calibration_summary["recommended_applied_speed"])
+                initial_speed = float(
+                    resolve_launch_speed(launch_calibration_summary, target_speed=initial_speed)["applied_speed"]
+                )
         initial_momentum = (
             0.0,
             solver.mass * initial_speed,

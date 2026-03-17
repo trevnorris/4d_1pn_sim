@@ -7,7 +7,12 @@ import torch
 
 from src.core.projection import projected_continuity_terms
 from src.physics.background_sources import StaticCentralBackground
-from src.physics.launch_calibration import probe_launch_response, safe_launch_speed_limit, summarize_launch_calibration
+from src.physics.launch_calibration import (
+    calibration_velocity_scale_samples,
+    probe_launch_response,
+    safe_launch_speed_limit,
+    summarize_launch_calibration,
+)
 from src.physics.observables import mode_occupations, translation_aligned_coherence
 
 
@@ -118,7 +123,11 @@ def run_static_launch_calibration(
     measure_start_step = int(calibration.get("measure_start_step", 8))
     measure_end_step = calibration.get("measure_end_step")
     measure_end_step = int(measure_end_step) if measure_end_step is not None else None
-    scales = [float(value) for value in calibration.get("velocity_scale_samples", [0.9, 0.95, 1.0, 1.05, 1.1])]
+    scales = calibration_velocity_scale_samples(
+        calibration.get("velocity_scale_samples", [0.9, 0.95, 1.0, 1.05, 1.1]),
+        target_velocity_scale=float(config["experiment"].get("velocity_scale", 1.0)),
+        safe_scale_limit=safe_speed / max(base_speed, 1.0e-12),
+    )
     probes = []
     for velocity_scale in scales:
         applied_speed = base_speed * velocity_scale

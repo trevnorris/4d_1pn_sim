@@ -11,6 +11,7 @@ from src.core.io import collect_runtime_info, dump_json, ensure_dir
 from src.experiments.common import build_solver, prepare_relaxed_state
 from src.physics.background_sources import StaticCentralBackground
 from src.physics.launch_calibration import (
+    calibration_velocity_scale_samples,
     probe_launch_response,
     safe_launch_speed_limit,
     summarize_launch_calibration,
@@ -19,15 +20,6 @@ from src.physics.launch_calibration import (
 
 def _calibration_config(config: dict) -> dict:
     return dict(config.get("launch_calibration", {}))
-
-
-def _velocity_scale_samples(calibration: dict, safe_scale_limit: float) -> list[float]:
-    configured = calibration.get("velocity_scale_samples")
-    if configured:
-        return [float(value) for value in configured if float(value) > 0.0]
-    upper = max(min(1.25, safe_scale_limit), 0.4)
-    return np.linspace(0.5, upper, 6, dtype=np.float64).tolist()
-
 
 def run(
     config_path: str | Path,
@@ -80,7 +72,11 @@ def run(
     measure_end_step = int(measure_end_step) if measure_end_step is not None else None
 
     probes = []
-    for velocity_scale in _velocity_scale_samples(calibration, safe_scale_limit=safe_scale_limit):
+    for velocity_scale in calibration_velocity_scale_samples(
+        calibration.get("velocity_scale_samples"),
+        target_velocity_scale=target_scale,
+        safe_scale_limit=safe_scale_limit,
+    ):
         applied_speed = base_speed * velocity_scale
         if applied_speed > safe_speed:
             continue

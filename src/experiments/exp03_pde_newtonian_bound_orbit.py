@@ -15,6 +15,7 @@ from src.experiments.common import build_solver, prepare_relaxed_state, state_fr
 from src.physics.background_sources import StaticCentralBackground
 from src.physics.boundary_sponge import build_boundary_sponge_mask
 from src.physics.defects import displace_and_boost_state
+from src.physics.launch_calibration import resolve_launch_speed
 from src.physics.newtonian_orbit_gate import evaluate_newtonian_orbit_gate
 from src.physics.open_system import UniformReservoirRefill
 from src.physics.orbit_diagnostics import summarize_effective_orbit_conservation, summarize_planar_orbit_trace
@@ -96,14 +97,25 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         refill_controller_factory=refill_controller_factory,
     )
     print(f"[exp03] stage=launch_calibration done elapsed_s={time.monotonic() - calibration_start:.2f}", flush=True)
+    base_speed = background.periapsis_speed(
+        float(config["experiment"]["periapsis_radius"]),
+        float(config["experiment"]["eccentricity"]),
+    )
+    target_speed = base_speed * float(config["experiment"].get("velocity_scale", 1.0))
     if calibration_summary is None:
-        base_speed = background.periapsis_speed(
-            float(config["experiment"]["periapsis_radius"]),
-            float(config["experiment"]["eccentricity"]),
-        )
-        applied_speed = base_speed * float(config["experiment"].get("velocity_scale", 1.0))
+        launch_choice = resolve_launch_speed(None, target_speed=target_speed)
+        applied_speed = float(launch_choice["applied_speed"])
     else:
-        applied_speed = float(calibration_summary["recommended_applied_speed"])
+        launch_choice = resolve_launch_speed(calibration_summary, target_speed=target_speed)
+        applied_speed = float(launch_choice["applied_speed"])
+        calibration_summary = dict(calibration_summary)
+        calibration_summary.update(
+            {
+                "selected_applied_speed": applied_speed,
+                "selected_launch_policy": str(launch_choice["selection"]),
+                "selected_velocity_summary": launch_choice["velocity_summary"],
+            }
+        )
         dump_json(output_path / "launch_calibration.json", calibration_summary)
 
     start_radius = float(config["experiment"]["periapsis_radius"])

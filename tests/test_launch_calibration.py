@@ -3,8 +3,10 @@ from types import SimpleNamespace
 import numpy as np
 
 from src.physics.launch_calibration import (
+    calibration_velocity_scale_samples,
     estimate_box_clearance,
     estimate_tangential_velocity,
+    resolve_launch_speed,
     safe_launch_speed_limit,
     summarize_launch_calibration,
 )
@@ -108,3 +110,92 @@ def test_summarize_launch_calibration_picks_closest_probe() -> None:
     assert abs(summary["recommended_realized_tangential_speed"] - 0.72) < 1.0e-12
     assert summary["target_reachable"]
     assert summary["recommended_window_usable"]
+
+
+def test_calibration_velocity_scale_samples_includes_exact_target_scale() -> None:
+    samples = calibration_velocity_scale_samples(
+        [0.9, 0.95, 1.0, 1.05, 1.1],
+        target_velocity_scale=0.978,
+        safe_scale_limit=1.1,
+    )
+
+    assert 0.978 in samples
+    assert samples == sorted(samples)
+
+
+def test_resolve_launch_speed_prefers_usable_target_probe() -> None:
+    probes = [
+        {
+            "applied_speed": 0.978,
+            "requested_momentum": 0.978,
+            "velocity_summary": {"mean_tangential_speed": 0.701, "mean_radial_speed": -0.003},
+            "launch_radius": 4.0,
+            "radius_bias": 0.02,
+            "window_summary": {"min_boundary_clearance": 4.2, "mean_boundary_clearance": 4.5},
+            "final_higher_mode_fraction": 0.01,
+            "final_norm": 1.0,
+        },
+        {
+            "applied_speed": 1.0,
+            "requested_momentum": 1.0,
+            "velocity_summary": {"mean_tangential_speed": 0.702, "mean_radial_speed": -0.001},
+            "launch_radius": 4.0,
+            "radius_bias": 0.01,
+            "window_summary": {"min_boundary_clearance": 4.4, "mean_boundary_clearance": 4.7},
+            "final_higher_mode_fraction": 0.01,
+            "final_norm": 1.0,
+        },
+    ]
+
+    summary = summarize_launch_calibration(
+        probes=probes,
+        target_speed=0.978,
+        safe_speed_limit=1.2,
+        boundary_clearance_floor=3.0,
+    )
+
+    launch_choice = resolve_launch_speed(summary, target_speed=0.978)
+
+    assert summary["target_probe_available"]
+    assert summary["target_probe_window_usable"]
+    assert launch_choice["selection"] == "target_probe"
+    assert abs(launch_choice["applied_speed"] - 0.978) < 1.0e-12
+
+
+def test_resolve_launch_speed_falls_back_when_target_probe_not_usable() -> None:
+    probes = [
+        {
+            "applied_speed": 0.978,
+            "requested_momentum": 0.978,
+            "velocity_summary": {"mean_tangential_speed": 0.701, "mean_radial_speed": -0.003},
+            "launch_radius": 4.0,
+            "radius_bias": 0.20,
+            "window_summary": {"min_boundary_clearance": 1.5, "mean_boundary_clearance": 2.0},
+            "final_higher_mode_fraction": 0.01,
+            "final_norm": 1.0,
+        },
+        {
+            "applied_speed": 1.0,
+            "requested_momentum": 1.0,
+            "velocity_summary": {"mean_tangential_speed": 0.74, "mean_radial_speed": -0.001},
+            "launch_radius": 4.0,
+            "radius_bias": 0.01,
+            "window_summary": {"min_boundary_clearance": 4.4, "mean_boundary_clearance": 4.7},
+            "final_higher_mode_fraction": 0.01,
+            "final_norm": 1.0,
+        },
+    ]
+
+    summary = summarize_launch_calibration(
+        probes=probes,
+        target_speed=0.978,
+        safe_speed_limit=1.2,
+        boundary_clearance_floor=3.0,
+    )
+
+    launch_choice = resolve_launch_speed(summary, target_speed=0.978)
+
+    assert summary["target_probe_available"]
+    assert summary["target_probe_window_usable"] is False
+    assert launch_choice["selection"] == "recommended_probe"
+    assert abs(launch_choice["applied_speed"] - 1.0) < 1.0e-12

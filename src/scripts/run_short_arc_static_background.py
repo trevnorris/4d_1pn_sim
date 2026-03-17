@@ -15,6 +15,7 @@ from src.core.io import collect_runtime_info, dump_json, ensure_dir
 from src.experiments.common import build_solver, prepare_relaxed_state, state_from_checkpoint
 from src.physics.background_sources import StaticCentralBackground
 from src.physics.defects import displace_and_boost_state
+from src.physics.launch_calibration import resolve_launch_speed
 from src.physics.pde_orbit_runtime import (
     run_static_launch_calibration,
     sample_continuity_metrics,
@@ -92,17 +93,19 @@ def run(
         scenario=scenario_name,
     )
     print(f"[short-arc] stage=launch_calibration done elapsed_s={time.monotonic() - calibration_start:.2f}", flush=True)
+    base_speed = background.periapsis_speed(
+        float(config["experiment"]["periapsis_radius"]),
+        float(config["experiment"]["eccentricity"]),
+    )
+    target_speed = base_speed * float(config["experiment"].get("velocity_scale", 1.0))
     if calibration_summary is None:
-        base_speed = background.periapsis_speed(
-            float(config["experiment"]["periapsis_radius"]),
-            float(config["experiment"]["eccentricity"]),
-        )
-        target_speed = base_speed * float(config["experiment"].get("velocity_scale", 1.0))
-        applied_speed = target_speed
+        launch_choice = resolve_launch_speed(None, target_speed=target_speed)
+        applied_speed = float(launch_choice["applied_speed"])
         tracer_velocity = np.array([0.0, target_speed, 0.0], dtype=np.float64)
     else:
-        applied_speed = float(calibration_summary["recommended_applied_speed"])
-        velocity_summary = calibration_summary["recommended_velocity_summary"]
+        launch_choice = resolve_launch_speed(calibration_summary, target_speed=target_speed)
+        applied_speed = float(launch_choice["applied_speed"])
+        velocity_summary = launch_choice["velocity_summary"] or calibration_summary["recommended_velocity_summary"]
         tracer_velocity = np.array(
             [
                 float(velocity_summary["mean_radial_speed"]),
@@ -110,6 +113,14 @@ def run(
                 0.0,
             ],
             dtype=np.float64,
+        )
+        calibration_summary = dict(calibration_summary)
+        calibration_summary.update(
+            {
+                "selected_applied_speed": applied_speed,
+                "selected_launch_policy": str(launch_choice["selection"]),
+                "selected_velocity_summary": launch_choice["velocity_summary"],
+            }
         )
         dump_json(output_path / "launch_calibration.json", calibration_summary)
 
