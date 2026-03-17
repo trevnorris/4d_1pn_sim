@@ -27,3 +27,4 @@ This file tracks the experiment ladder status at a glance.
 ## Immediate next step
 
 - Run the guarded `320^3 / L=60` Newtonian `sponge_only` narrow velocity refinement on the best trap branch `trap_strength_r = 0.125`, testing `velocity_scale = 0.975, 0.978, 0.981, 0.983` while using the completed `0.97` and `0.985` runs as anchors.
+- For overnight server use, a follow-on wrapper is available that waits for that refine batch to finish and then runs two `12288`-step confirmations at `velocity_scale = 0.978` and `0.981`.

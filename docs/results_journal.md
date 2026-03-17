@@ -1333,3 +1333,16 @@ Operational note:
 - the prepared `0.125` velocity-refine configs disable the heavy `checkpoint_relaxed.npz`, `checkpoint_inserted.npz`, and `checkpoint_final.npz` artifacts,
 - they still write `summary.json`, `plain_language_summary.txt`, `timeseries.npz`, `config.json`, `runtime.json`, and `launch_calibration.json`,
 - this keeps the screen usable on smaller cloud volumes.
+
+Prepared overnight follow-on:
+
+- `configs/local/exp03_newtonian_bound_orbit_320_confirm_t0125_v0978_long.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_confirm_t0125_v0981_long.json`
+- `scripts/run_exp03_newtonian_bound_orbit_320_velocity_refine_then_confirm.sh`
+
+Purpose:
+
+- start in a second shell while the current `0.125` velocity-refine batch is already running,
+- wait for those four `summary.json` files to appear,
+- then spend the remaining server time on two longer `12288`-step confirmations at the two most plausible middle velocities,
+- still avoid large checkpoint artifacts so the cloud volume does not fill up overnight.

@@ -144,6 +144,12 @@ Narrow velocity refinement on the best trap branch:
 ./scripts/run_exp03_newtonian_bound_orbit_320_velocity_refine_t0125.sh
 ```
 
+Overnight follow-on that waits for the current refine batch, then runs 2 longer confirmations:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_320_velocity_refine_then_confirm.sh
+```
+
 ## Runtime guidance
 
 - The `256^3` long-orbit PDE branch is a serious run, not a quick local sanity check.
