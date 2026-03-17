@@ -35,12 +35,16 @@ def sample_light_metrics(
 ) -> dict[str, float]:
     occupations = mode_occupations(state.psi_modes, solver.grid.cell_volume)
     occupation_total = occupations.sum().clamp_min(1.0e-12)
+    total_norm = float(occupation_total)
+    box_volume = float(np.prod(np.asarray(solver.grid.length, dtype=np.float64)))
     return {
         "mean_coherence": float(
             translation_aligned_coherence(solver, reference_modes, state.psi_modes, solver.grid.cell_volume)
         ),
         "mean_higher_mode_fraction": float(occupations[1:].sum() / occupation_total),
         "mean_compactness": effective_radius_of_gyration(solver, state.psi_modes),
+        "total_norm": total_norm,
+        "mean_box_density": float(total_norm / max(box_volume, 1.0e-12)),
     }
 
 

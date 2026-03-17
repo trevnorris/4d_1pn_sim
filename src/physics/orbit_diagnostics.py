@@ -23,6 +23,22 @@ def finite_difference_velocity(
     return velocity
 
 
+def finite_difference_acceleration(
+    velocities: np.ndarray,
+    times: np.ndarray,
+) -> np.ndarray:
+    velocity = np.asarray(velocities, dtype=np.float64)
+    time = np.asarray(times, dtype=np.float64)
+    if velocity.ndim != 2 or velocity.shape[0] != time.size:
+        raise ValueError("velocities must have shape (num_samples, dim) and match the time array")
+    if time.size < 3:
+        raise ValueError("Need at least three samples to estimate acceleration by finite differences")
+    acceleration = np.empty_like(velocity, dtype=np.float64)
+    for axis in range(velocity.shape[1]):
+        acceleration[:, axis] = np.gradient(velocity[:, axis], time, edge_order=2)
+    return acceleration
+
+
 def specific_orbital_energy(
     positions: np.ndarray,
     velocities: np.ndarray,
@@ -46,6 +62,66 @@ def angular_momentum_z(
     return np.cross(coords, velocity, axis=1)[:, 2]
 
 
+def effective_orbit_kinematics(
+    time: np.ndarray,
+    positions: np.ndarray,
+    velocities: np.ndarray | None = None,
+    source_center: Sequence[float] = (0.0, 0.0, 0.0),
+    mu: float | None = None,
+) -> dict[str, np.ndarray]:
+    time_array = np.asarray(time, dtype=np.float64)
+    coords = np.asarray(positions, dtype=np.float64)
+    if coords.ndim != 2 or coords.shape[0] != time_array.size or coords.shape[1] < 3:
+        raise ValueError("positions must have shape (num_samples, 3+) and match the time array")
+
+    if velocities is None:
+        velocity_array = finite_difference_velocity(coords, time_array)
+    else:
+        velocity_array = np.asarray(velocities, dtype=np.float64)
+        if velocity_array.shape != coords.shape:
+            raise ValueError("velocities must match the shape of positions")
+    acceleration_array = finite_difference_acceleration(velocity_array, time_array)
+
+    relative = coords - np.asarray(source_center, dtype=np.float64)[None, :]
+    radius_vec = relative[:, :2]
+    planar_velocity = velocity_array[:, :2]
+    planar_acceleration = acceleration_array[:, :2]
+    radius = np.linalg.norm(radius_vec, axis=1)
+    safe_radius = np.maximum(radius, 1.0e-12)
+    radial_hat = radius_vec / safe_radius[:, None]
+    tangential_hat = np.stack([-radial_hat[:, 1], radial_hat[:, 0]], axis=1)
+
+    radial_speed = np.sum(planar_velocity * radial_hat, axis=1)
+    tangential_speed = np.sum(planar_velocity * tangential_hat, axis=1)
+    radial_acceleration = np.sum(planar_acceleration * radial_hat, axis=1)
+    tangential_acceleration = np.sum(planar_acceleration * tangential_hat, axis=1)
+
+    if mu is None:
+        kepler_radial_acceleration = np.full_like(radius, np.nan, dtype=np.float64)
+        radial_residual_acceleration = np.full_like(radius, np.nan, dtype=np.float64)
+        power_residual = np.full_like(radius, np.nan, dtype=np.float64)
+    else:
+        kepler_radial_acceleration = -float(mu) / safe_radius**2
+        radial_residual_acceleration = radial_acceleration - kepler_radial_acceleration
+        kepler_acceleration = kepler_radial_acceleration[:, None] * radial_hat
+        power_residual = np.sum(planar_velocity * (planar_acceleration - kepler_acceleration), axis=1)
+
+    specific_torque_z = np.cross(relative, acceleration_array, axis=1)[:, 2]
+    return {
+        "velocity": velocity_array,
+        "acceleration": acceleration_array,
+        "radius": radius,
+        "radial_speed": radial_speed,
+        "tangential_speed": tangential_speed,
+        "radial_acceleration": radial_acceleration,
+        "tangential_acceleration": tangential_acceleration,
+        "kepler_radial_acceleration": kepler_radial_acceleration,
+        "radial_residual_acceleration": radial_residual_acceleration,
+        "specific_torque_z": specific_torque_z,
+        "power_residual": power_residual,
+    }
+
+
 def summarize_scalar_drift(
     values: np.ndarray,
     fit_start_index: int = 0,
@@ -65,6 +141,109 @@ def summarize_scalar_drift(
         "rms_drift": float(np.sqrt(np.mean(delta**2))),
         "max_rel_drift": float(np.max(np.abs(delta)) / scale),
         "rms_rel_drift": float(np.sqrt(np.mean(delta**2)) / scale),
+    }
+
+
+def summarize_drag_like_residuals(
+    time: np.ndarray,
+    positions: np.ndarray,
+    velocities: np.ndarray | None = None,
+    source_center: Sequence[float] = (0.0, 0.0, 0.0),
+    mu: float | None = None,
+    fit_start_index: int = 0,
+) -> dict[str, float]:
+    kinematics = effective_orbit_kinematics(
+        time=time,
+        positions=positions,
+        velocities=velocities,
+        source_center=source_center,
+        mu=mu,
+    )
+
+    start = int(fit_start_index)
+
+    def _summary(name: str) -> tuple[float, float]:
+        values = np.asarray(kinematics[name], dtype=np.float64)[start:]
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            return float("nan"), float("nan")
+        return float(np.mean(values)), float(np.max(np.abs(values)))
+
+    mean_tangential_acceleration, max_abs_tangential_acceleration = _summary("tangential_acceleration")
+    mean_specific_torque_z, max_abs_specific_torque_z = _summary("specific_torque_z")
+    mean_power_residual, max_abs_power_residual = _summary("power_residual")
+    mean_radial_residual_acceleration, max_abs_radial_residual_acceleration = _summary("radial_residual_acceleration")
+    mean_radial_speed, _ = _summary("radial_speed")
+    mean_tangential_speed, _ = _summary("tangential_speed")
+    return {
+        "mean_tangential_acceleration": mean_tangential_acceleration,
+        "max_abs_tangential_acceleration": max_abs_tangential_acceleration,
+        "mean_specific_torque_z": mean_specific_torque_z,
+        "max_abs_specific_torque_z": max_abs_specific_torque_z,
+        "mean_power_residual": mean_power_residual,
+        "max_abs_power_residual": max_abs_power_residual,
+        "mean_radial_residual_acceleration": mean_radial_residual_acceleration,
+        "max_abs_radial_residual_acceleration": max_abs_radial_residual_acceleration,
+        "mean_radial_speed": mean_radial_speed,
+        "mean_tangential_speed": mean_tangential_speed,
+    }
+
+
+def summarize_box_density_audit(
+    sample_times: np.ndarray,
+    total_norm: np.ndarray,
+    orbit_radius: np.ndarray,
+    *,
+    box_volume: float,
+    start_time: float = 0.0,
+    end_time: float | None = None,
+) -> dict[str, float | int | None]:
+    times = np.asarray(sample_times, dtype=np.float64)
+    norm = np.asarray(total_norm, dtype=np.float64)
+    radius = np.asarray(orbit_radius, dtype=np.float64)
+    if times.ndim != 1 or norm.ndim != 1 or radius.ndim != 1:
+        raise ValueError("sample_times, total_norm, and orbit_radius must be one-dimensional")
+    if not (times.size == norm.size == radius.size):
+        raise ValueError("sample_times, total_norm, and orbit_radius must have the same length")
+    if times.size == 0:
+        raise ValueError("Need at least one density sample")
+
+    if end_time is None:
+        end_time = float(times[-1])
+    mask = (times >= float(start_time)) & (times <= float(end_time))
+    if not np.any(mask):
+        nearest = int(np.argmin(np.abs(times - 0.5 * (float(start_time) + float(end_time)))))
+        mask[nearest] = True
+
+    window_norm = norm[mask]
+    window_radius = radius[mask]
+    density = window_norm / max(float(box_volume), 1.0e-12)
+    initial_norm = float(window_norm[0])
+    initial_density = float(density[0])
+    norm_drop = initial_norm - window_norm
+    density_drop = initial_density - density
+
+    radius_density_correlation: float | None
+    if window_norm.size < 2 or np.std(window_norm) < 1.0e-12 or np.std(window_radius) < 1.0e-12:
+        radius_density_correlation = None
+    else:
+        radius_density_correlation = float(np.corrcoef(window_norm, window_radius)[0, 1])
+
+    return {
+        "window_sample_count": int(window_norm.size),
+        "initial_total_norm": initial_norm,
+        "final_total_norm": float(window_norm[-1]),
+        "min_total_norm": float(np.min(window_norm)),
+        "mean_total_norm": float(np.mean(window_norm)),
+        "max_abs_total_norm_drop": float(np.max(norm_drop)),
+        "max_rel_total_norm_drop": float(np.max(norm_drop) / max(abs(initial_norm), 1.0e-12)),
+        "initial_mean_box_density": initial_density,
+        "final_mean_box_density": float(density[-1]),
+        "min_mean_box_density": float(np.min(density)),
+        "mean_mean_box_density": float(np.mean(density)),
+        "max_abs_mean_box_density_drop": float(np.max(density_drop)),
+        "max_rel_mean_box_density_drop": float(np.max(density_drop) / max(abs(initial_density), 1.0e-12)),
+        "radius_total_norm_correlation": radius_density_correlation,
     }
 
 
@@ -113,6 +292,14 @@ def summarize_effective_orbit_conservation(
         "potential_source": potential_source,
         "orbital_energy_summary": summarize_scalar_drift(energy, fit_start_index=fit_start_index),
         "angular_momentum_z_summary": summarize_scalar_drift(angular_momentum, fit_start_index=fit_start_index),
+        "drag_audit_summary": summarize_drag_like_residuals(
+            time=time_array,
+            positions=coords,
+            velocities=velocity_array,
+            source_center=source_center,
+            mu=mu,
+            fit_start_index=fit_start_index,
+        ),
     }
 
 
@@ -201,4 +388,5 @@ def summarize_planar_orbit_trace(
         "mean_fit_radius": float(np.mean(radius)),
         "orbital_energy_summary": conservation["orbital_energy_summary"],
         "angular_momentum_z_summary": conservation["angular_momentum_z_summary"],
+        "drag_audit_summary": conservation["drag_audit_summary"],
     }

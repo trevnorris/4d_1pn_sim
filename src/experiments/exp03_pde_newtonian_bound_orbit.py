@@ -18,7 +18,12 @@ from src.physics.defects import displace_and_boost_state
 from src.physics.launch_calibration import resolve_launch_speed
 from src.physics.newtonian_orbit_gate import evaluate_newtonian_orbit_gate
 from src.physics.open_system import UniformReservoirRefill
-from src.physics.orbit_diagnostics import summarize_effective_orbit_conservation, summarize_planar_orbit_trace
+from src.physics.orbit_diagnostics import (
+    effective_orbit_kinematics,
+    summarize_box_density_audit,
+    summarize_effective_orbit_conservation,
+    summarize_planar_orbit_trace,
+)
 from src.physics.pde_orbit_runtime import (
     run_static_launch_calibration,
     sample_continuity_metrics,
@@ -178,6 +183,9 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     coherence_history: list[float] = []
     higher_mode_history: list[float] = []
     compactness_history: list[float] = []
+    total_norm_history: list[float] = []
+    mean_box_density_history: list[float] = []
+    metric_orbit_radius_history: list[float] = []
     continuity_sample_times: list[float] = []
     leakage_history: list[float] = []
     continuity_history: list[float] = []
@@ -237,6 +245,9 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             coherence_history.append(float(light_metrics["mean_coherence"]))
             higher_mode_history.append(float(light_metrics["mean_higher_mode_fraction"]))
             compactness_history.append(float(light_metrics["mean_compactness"]))
+            total_norm_history.append(float(light_metrics["total_norm"]))
+            mean_box_density_history.append(float(light_metrics["mean_box_density"]))
+            metric_orbit_radius_history.append(float(np.linalg.norm(np.asarray(current_center, dtype=np.float64)[:2])))
             final_snapshot = {
                 "time": float(state.time),
                 "step": int(state.step),
@@ -355,6 +366,20 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         mu=background.mu,
         fit_start_index=fit_start_index,
     )
+    orbit_kinematics = effective_orbit_kinematics(
+        time=defect_time_array,
+        positions=defect_positions_array,
+        source_center=background.center,
+        mu=background.mu,
+    )
+    metric_box_density_summary = summarize_box_density_audit(
+        sample_times=metric_sample_times_array,
+        total_norm=np.asarray(total_norm_history, dtype=np.float64),
+        orbit_radius=np.asarray(metric_orbit_radius_history, dtype=np.float64),
+        box_volume=float(np.prod(np.asarray(solver.grid.length, dtype=np.float64))),
+        start_time=window_start_time,
+        end_time=window_end_time,
+    )
     try:
         orbit_summary = summarize_planar_orbit_trace(
             time=defect_time_array,
@@ -419,6 +444,18 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             window_start_time,
             window_end_time,
         ),
+        "mean_total_norm": window_mean(
+            np.asarray(total_norm_history, dtype=np.float64),
+            metric_sample_times_array,
+            window_start_time,
+            window_end_time,
+        ),
+        "mean_box_density": window_mean(
+            np.asarray(mean_box_density_history, dtype=np.float64),
+            metric_sample_times_array,
+            window_start_time,
+            window_end_time,
+        ),
         "mean_continuity_residual": (
             window_mean(
                 np.asarray(continuity_history, dtype=np.float64),
@@ -470,9 +507,23 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         output_path / "timeseries.npz",
         time=defect_time_array,
         defect_position=defect_positions_array,
+        defect_velocity=orbit_kinematics["velocity"],
+        defect_acceleration=orbit_kinematics["acceleration"],
+        orbit_radius=orbit_kinematics["radius"],
+        radial_speed=orbit_kinematics["radial_speed"],
+        tangential_speed=orbit_kinematics["tangential_speed"],
+        radial_acceleration=orbit_kinematics["radial_acceleration"],
+        tangential_acceleration=orbit_kinematics["tangential_acceleration"],
+        kepler_radial_acceleration=orbit_kinematics["kepler_radial_acceleration"],
+        radial_residual_acceleration=orbit_kinematics["radial_residual_acceleration"],
+        specific_torque_z=orbit_kinematics["specific_torque_z"],
+        power_residual=orbit_kinematics["power_residual"],
         metric_sample_time=metric_sample_times_array,
         coherence=np.asarray(coherence_history, dtype=np.float64),
         higher_mode_fraction=np.asarray(higher_mode_history, dtype=np.float64),
+        total_norm=np.asarray(total_norm_history, dtype=np.float64),
+        mean_box_density=np.asarray(mean_box_density_history, dtype=np.float64),
+        metric_orbit_radius=np.asarray(metric_orbit_radius_history, dtype=np.float64),
         continuity_sample_time=continuity_sample_times_array,
         mean_S_leak=np.asarray(leakage_history, dtype=np.float64),
         signed_S_leak=np.asarray(signed_leakage_history, dtype=np.float64),
@@ -516,6 +567,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         },
         "launch_calibration": calibration_summary,
         "orbit_summary": orbit_summary,
+        "box_density_audit": metric_box_density_summary,
         "defect_metrics": defect_metrics,
         "newtonian_gate": newtonian_gate,
         "runtime_abort": runtime_abort_summary,
@@ -556,6 +608,11 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         f"- periapse count = {orbit_summary.get('periapse_count', 0)}",
         f"- max relative orbital-energy drift = {orbit_summary['orbital_energy_summary']['max_rel_drift']:.6e}",
         f"- max relative angular-momentum drift = {orbit_summary['angular_momentum_z_summary']['max_rel_drift']:.6e}",
+        f"- mean tangential acceleration residual = {orbit_summary['drag_audit_summary']['mean_tangential_acceleration']:.6e}",
+        f"- mean specific torque z = {orbit_summary['drag_audit_summary']['mean_specific_torque_z']:.6e}",
+        f"- mean power residual = {orbit_summary['drag_audit_summary']['mean_power_residual']:.6e}",
+        f"- max relative total-norm drop = {metric_box_density_summary['max_rel_total_norm_drop']:.6e}",
+        f"- radius/total-norm correlation = {metric_box_density_summary['radius_total_norm_correlation']}",
         f"- mean coherence = {defect_metrics['mean_coherence']:.6f}",
         f"- mean higher-mode fraction = {defect_metrics['mean_higher_mode_fraction']:.6e}",
         (
@@ -584,6 +641,8 @@ def main() -> None:
     print(f"fit_error: {summary['orbit_summary'].get('fit_error')}")
     print(f"max_rel_energy_drift: {summary['orbit_summary']['orbital_energy_summary']['max_rel_drift']:.6e}")
     print(f"max_rel_angular_momentum_drift: {summary['orbit_summary']['angular_momentum_z_summary']['max_rel_drift']:.6e}")
+    print(f"mean_tangential_acceleration: {summary['orbit_summary']['drag_audit_summary']['mean_tangential_acceleration']:.6e}")
+    print(f"max_rel_total_norm_drop: {summary['box_density_audit']['max_rel_total_norm_drop']:.6e}")
     print(f"mean_coherence: {summary['defect_metrics']['mean_coherence']:.6f}")
 
 
