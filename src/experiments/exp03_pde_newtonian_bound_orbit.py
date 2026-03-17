@@ -18,6 +18,7 @@ from src.physics.defects import displace_and_boost_state
 from src.physics.launch_calibration import resolve_launch_speed
 from src.physics.newtonian_orbit_gate import evaluate_newtonian_orbit_gate
 from src.physics.open_system import UniformReservoirRefill
+from src.physics.operator_budget import OperatorBudgetRecorder, STAGE_ORDER, summarize_operator_budget
 from src.physics.orbit_diagnostics import (
     effective_orbit_kinematics,
     summarize_box_density_audit,
@@ -176,6 +177,13 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             "required_consecutive_failures",
         }
     }
+    operator_budget_config = dict(config.get("operator_budget", {}))
+    operator_budget_enabled = bool(operator_budget_config.get("enabled", True))
+    operator_budget_stride = max(
+        1,
+        int(operator_budget_config.get("stride", metric_stride if metric_stride > 0 else 16)),
+    )
+    operator_budget_recorder = OperatorBudgetRecorder() if operator_budget_enabled else None
 
     defect_positions: list[list[float]] = []
     defect_time: list[float] = []
@@ -215,16 +223,47 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
     print("[exp03] stage=evolve start", flush=True)
     evolve_start = time.monotonic()
     for idx in range(steps):
-        state = solver.step(
-            state,
-            dt=dt,
-            rho_ambient=rho0,
-            external_potential=background_potential,
-            node_amplitude_mask=boundary_sponge_mask,
-        )
         refill_metrics = None
+        collect_operator_budget = bool(
+            operator_budget_enabled
+            and (((idx + 1) % operator_budget_stride == 0) or idx == 0 or idx == steps - 1)
+        )
+        if collect_operator_budget:
+            stage_states = solver.step_components(
+                state,
+                dt=dt,
+                rho_ambient=rho0,
+                external_potential=background_potential,
+                node_amplitude_mask=boundary_sponge_mask,
+            )
+            pre_refill_state = stage_states["linear2"]
+            if orbit_refill_controller is not None:
+                state, refill_metrics = orbit_refill_controller.apply(solver=solver, state=pre_refill_state, dt=dt)
+            else:
+                state = pre_refill_state
+            stage_states["refill"] = state
+            if operator_budget_recorder is not None:
+                for stage_name in STAGE_ORDER:
+                    stage_state = stage_states[stage_name]
+                    stage_center = solver.estimate_defect_center(stage_state.psi_modes).detach().cpu().numpy()
+                    operator_budget_recorder.record(
+                        stage=stage_name,
+                        time=float(stage_state.time),
+                        position=stage_center.tolist(),
+                        total_norm=float(solver.total_norm(stage_state.psi_modes)),
+                    )
+        else:
+            state = solver.step(
+                state,
+                dt=dt,
+                rho_ambient=rho0,
+                external_potential=background_potential,
+                node_amplitude_mask=boundary_sponge_mask,
+            )
+            if orbit_refill_controller is not None:
+                state, refill_metrics = orbit_refill_controller.apply(solver=solver, state=state, dt=dt)
+
         if orbit_refill_controller is not None:
-            state, refill_metrics = orbit_refill_controller.apply(solver=solver, state=state, dt=dt)
             refill_sample_times.append(float(state.time))
             leakage_history.append(float(refill_metrics["mean_leakage"]))
             signed_leakage_history.append(float(refill_metrics["signed_leakage_mean"]))
@@ -380,6 +419,17 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         start_time=window_start_time,
         end_time=window_end_time,
     )
+    operator_budget_summary = (
+        summarize_operator_budget(
+            operator_budget_recorder,
+            source_center=background.center,
+            potential_fn=background.potential_at_position,
+            mu=background.mu,
+            fit_start_index=0,
+        )
+        if operator_budget_recorder is not None
+        else None
+    )
     try:
         orbit_summary = summarize_planar_orbit_trace(
             time=defect_time_array,
@@ -503,36 +553,41 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
                 "rho_ambient": state.rho_ambient,
             },
         )
-    np.savez_compressed(
-        output_path / "timeseries.npz",
-        time=defect_time_array,
-        defect_position=defect_positions_array,
-        defect_velocity=orbit_kinematics["velocity"],
-        defect_acceleration=orbit_kinematics["acceleration"],
-        orbit_radius=orbit_kinematics["radius"],
-        radial_speed=orbit_kinematics["radial_speed"],
-        tangential_speed=orbit_kinematics["tangential_speed"],
-        radial_acceleration=orbit_kinematics["radial_acceleration"],
-        tangential_acceleration=orbit_kinematics["tangential_acceleration"],
-        kepler_radial_acceleration=orbit_kinematics["kepler_radial_acceleration"],
-        radial_residual_acceleration=orbit_kinematics["radial_residual_acceleration"],
-        specific_torque_z=orbit_kinematics["specific_torque_z"],
-        power_residual=orbit_kinematics["power_residual"],
-        metric_sample_time=metric_sample_times_array,
-        coherence=np.asarray(coherence_history, dtype=np.float64),
-        higher_mode_fraction=np.asarray(higher_mode_history, dtype=np.float64),
-        total_norm=np.asarray(total_norm_history, dtype=np.float64),
-        mean_box_density=np.asarray(mean_box_density_history, dtype=np.float64),
-        metric_orbit_radius=np.asarray(metric_orbit_radius_history, dtype=np.float64),
-        continuity_sample_time=continuity_sample_times_array,
-        mean_S_leak=np.asarray(leakage_history, dtype=np.float64),
-        signed_S_leak=np.asarray(signed_leakage_history, dtype=np.float64),
-        refill_sample_time=np.asarray(refill_sample_times, dtype=np.float64),
-        refill_delta_norm=np.asarray(refill_applied_history, dtype=np.float64),
-        radius_of_gyration=np.asarray(compactness_history, dtype=np.float64),
-        continuity_residual_l2=np.asarray(continuity_history, dtype=np.float64),
-        boundary_clearance=np.asarray(boundary_clearance_history, dtype=np.float64),
-    )
+    timeseries_data = {
+        "time": defect_time_array,
+        "defect_position": defect_positions_array,
+        "defect_velocity": orbit_kinematics["velocity"],
+        "defect_acceleration": orbit_kinematics["acceleration"],
+        "orbit_radius": orbit_kinematics["radius"],
+        "radial_speed": orbit_kinematics["radial_speed"],
+        "tangential_speed": orbit_kinematics["tangential_speed"],
+        "radial_acceleration": orbit_kinematics["radial_acceleration"],
+        "tangential_acceleration": orbit_kinematics["tangential_acceleration"],
+        "kepler_radial_acceleration": orbit_kinematics["kepler_radial_acceleration"],
+        "radial_residual_acceleration": orbit_kinematics["radial_residual_acceleration"],
+        "specific_torque_z": orbit_kinematics["specific_torque_z"],
+        "power_residual": orbit_kinematics["power_residual"],
+        "metric_sample_time": metric_sample_times_array,
+        "coherence": np.asarray(coherence_history, dtype=np.float64),
+        "higher_mode_fraction": np.asarray(higher_mode_history, dtype=np.float64),
+        "total_norm": np.asarray(total_norm_history, dtype=np.float64),
+        "mean_box_density": np.asarray(mean_box_density_history, dtype=np.float64),
+        "metric_orbit_radius": np.asarray(metric_orbit_radius_history, dtype=np.float64),
+        "continuity_sample_time": continuity_sample_times_array,
+        "mean_S_leak": np.asarray(leakage_history, dtype=np.float64),
+        "signed_S_leak": np.asarray(signed_leakage_history, dtype=np.float64),
+        "refill_sample_time": np.asarray(refill_sample_times, dtype=np.float64),
+        "refill_delta_norm": np.asarray(refill_applied_history, dtype=np.float64),
+        "radius_of_gyration": np.asarray(compactness_history, dtype=np.float64),
+        "continuity_residual_l2": np.asarray(continuity_history, dtype=np.float64),
+        "boundary_clearance": np.asarray(boundary_clearance_history, dtype=np.float64),
+    }
+    if operator_budget_recorder is not None:
+        for stage_name, stage_arrays in operator_budget_recorder.arrays().items():
+            timeseries_data[f"operator_budget_{stage_name}_time"] = stage_arrays["time"]
+            timeseries_data[f"operator_budget_{stage_name}_position"] = stage_arrays["position"]
+            timeseries_data[f"operator_budget_{stage_name}_total_norm"] = stage_arrays["total_norm"]
+    np.savez_compressed(output_path / "timeseries.npz", **timeseries_data)
 
     summary = {
         "run_name": str(config["run_name"]),
@@ -565,8 +620,13 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             "save_inserted": bool(save_inserted_checkpoint),
             "save_final": bool(save_final_checkpoint),
         },
+        "operator_budget_config": {
+            "enabled": bool(operator_budget_enabled),
+            "stride": int(operator_budget_stride),
+        },
         "launch_calibration": calibration_summary,
         "orbit_summary": orbit_summary,
+        "operator_budget": operator_budget_summary,
         "box_density_audit": metric_box_density_summary,
         "defect_metrics": defect_metrics,
         "newtonian_gate": newtonian_gate,
@@ -578,6 +638,7 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
             "This run uses the imposed static analytic background with fixed ambient density rho0 and no dressing response.",
             "The defect confinement remains centered on the instantaneous defect COM as a reduced COM/internal split surrogate.",
             "The orbit_summary energy and angular-momentum drifts are effective COM point-particle diagnostics, not exact full-field invariants.",
+            "The operator_budget block is an effective COM diagnostic built from split-step stage samples; it localizes non-conservative trends but is not an exact field-theoretic operator identity.",
             "This is a Newtonian-gate run, not a 1PN measurement run.",
             (
                 "An optional boundary sponge is active to damp outgoing edge-reaching waves before they wrap through the periodic domain."
@@ -613,6 +674,11 @@ def run(config_path: str | Path, restart_relaxed: str | Path | None = None) -> P
         f"- mean power residual = {orbit_summary['drag_audit_summary']['mean_power_residual']:.6e}",
         f"- max relative total-norm drop = {metric_box_density_summary['max_rel_total_norm_drop']:.6e}",
         f"- radius/total-norm correlation = {metric_box_density_summary['radius_total_norm_correlation']}",
+        (
+            f"- sponge step mean dLz = {operator_budget_summary['transitions']['nonlinear_to_sponge']['angular_momentum_z']['mean_delta']:.6e}"
+            if operator_budget_summary is not None and "nonlinear_to_sponge" in operator_budget_summary["transitions"]
+            else "- sponge step mean dLz = n/a"
+        ),
         f"- mean coherence = {defect_metrics['mean_coherence']:.6f}",
         f"- mean higher-mode fraction = {defect_metrics['mean_higher_mode_fraction']:.6e}",
         (
@@ -643,6 +709,11 @@ def main() -> None:
     print(f"max_rel_angular_momentum_drift: {summary['orbit_summary']['angular_momentum_z_summary']['max_rel_drift']:.6e}")
     print(f"mean_tangential_acceleration: {summary['orbit_summary']['drag_audit_summary']['mean_tangential_acceleration']:.6e}")
     print(f"max_rel_total_norm_drop: {summary['box_density_audit']['max_rel_total_norm_drop']:.6e}")
+    operator_budget = summary.get("operator_budget") or {}
+    transitions = operator_budget.get("transitions") or {}
+    sponge_budget = transitions.get("nonlinear_to_sponge")
+    if sponge_budget is not None:
+        print(f"sponge_step_mean_dLz: {sponge_budget['angular_momentum_z']['mean_delta']:.6e}")
     print(f"mean_coherence: {summary['defect_metrics']['mean_coherence']:.6f}")
 
 

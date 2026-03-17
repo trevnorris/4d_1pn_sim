@@ -97,6 +97,37 @@ def test_uniform_reservoir_refill_restores_target_norm() -> None:
     assert metrics["delta_norm_applied"] > 0.0
 
 
+def test_step_components_matches_step() -> None:
+    solver = _build_solver()
+    torch.manual_seed(1234)
+    psi_modes = torch.randn((4, 4, 4, 4), dtype=torch.complex128)
+    state = MatterState(psi_modes=psi_modes, time=0.0, step=0, a=1.1, rho_ambient=1.0)
+    mask = build_boundary_sponge_mask(
+        grid=solver.grid,
+        dt=0.015,
+        config={"enabled": True, "width": 2.0, "strength": 8.0, "power": 2.0},
+    )
+
+    direct = solver.step(
+        state,
+        dt=0.015,
+        rho_ambient=1.0,
+        external_potential=None,
+        node_amplitude_mask=mask,
+    )
+    components = solver.step_components(
+        state,
+        dt=0.015,
+        rho_ambient=1.0,
+        external_potential=None,
+        node_amplitude_mask=mask,
+    )
+
+    assert torch.allclose(direct.psi_modes, components["linear2"].psi_modes, atol=1.0e-12, rtol=1.0e-12)
+    assert direct.time == components["linear2"].time
+    assert direct.step == components["linear2"].step
+
+
 def test_boundary_sponge_mask_damps_edges_more_than_center() -> None:
     solver = _build_solver()
     mask = build_boundary_sponge_mask(

@@ -127,6 +127,26 @@ class MatterSplitStepSolver:
         confinement_center: torch.Tensor | None = None,
         node_amplitude_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        psi_nodes = self.nonlinear_full_step_nodes(
+            psi_modes,
+            delta,
+            a_value,
+            rho_ambient,
+            external_potential=external_potential,
+            confinement_center=confinement_center,
+        )
+        psi_nodes = self.apply_node_amplitude_mask_to_nodes(psi_nodes, node_amplitude_mask=node_amplitude_mask)
+        return self.project_nodes(psi_nodes)
+
+    def nonlinear_full_step_nodes(
+        self,
+        psi_modes: torch.Tensor,
+        delta: complex | float,
+        a_value: float,
+        rho_ambient: float,
+        external_potential: torch.Tensor | None = None,
+        confinement_center: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         psi_nodes = self.reconstruct_nodes(psi_modes)
         potential = self.nonlinear_potential(
             psi_nodes,
@@ -137,10 +157,76 @@ class MatterSplitStepSolver:
         )
         phase = torch.exp(torch.as_tensor(delta, device=psi_modes.device) * potential.to(self.complex_dtype))
         psi_nodes = psi_nodes * phase
+        return psi_nodes
+
+    def apply_node_amplitude_mask_to_nodes(
+        self,
+        psi_nodes: torch.Tensor,
+        node_amplitude_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if node_amplitude_mask is not None:
             mask = node_amplitude_mask.unsqueeze(0) if node_amplitude_mask.ndim == 3 else node_amplitude_mask
             psi_nodes = psi_nodes * mask.to(psi_nodes.dtype)
-        return self.project_nodes(psi_nodes)
+        return psi_nodes
+
+    def step_components(
+        self,
+        state: MatterState,
+        dt: float,
+        rho_ambient: float,
+        external_potential: torch.Tensor | None = None,
+        node_amplitude_mask: torch.Tensor | None = None,
+    ) -> dict[str, MatterState]:
+        a_value = self.geometry.equilibrium_a(rho_ambient, initial_guess=state.a)
+        confinement_center = self.estimate_defect_center(state.psi_modes)
+        psi_half = self.linear_half_step(state.psi_modes, -0.5j * dt)
+        linear1_state = MatterState(
+            psi_modes=psi_half,
+            time=state.time + 0.5 * dt,
+            step=state.step,
+            a=a_value,
+            rho_ambient=rho_ambient,
+        )
+        nonlinear_nodes = self.nonlinear_full_step_nodes(
+            psi_half,
+            -1.0j * dt,
+            a_value,
+            rho_ambient,
+            external_potential=external_potential,
+            confinement_center=confinement_center,
+        )
+        psi_nonlinear = self.project_nodes(nonlinear_nodes)
+        nonlinear_state = MatterState(
+            psi_modes=psi_nonlinear,
+            time=state.time + 0.5 * dt,
+            step=state.step,
+            a=a_value,
+            rho_ambient=rho_ambient,
+        )
+        sponge_nodes = self.apply_node_amplitude_mask_to_nodes(nonlinear_nodes, node_amplitude_mask=node_amplitude_mask)
+        psi_sponge = self.project_nodes(sponge_nodes)
+        sponge_state = MatterState(
+            psi_modes=psi_sponge,
+            time=state.time + 0.5 * dt,
+            step=state.step,
+            a=a_value,
+            rho_ambient=rho_ambient,
+        )
+        psi_next = self.linear_half_step(psi_sponge, -0.5j * dt)
+        linear2_state = MatterState(
+            psi_modes=psi_next,
+            time=state.time + dt,
+            step=state.step + 1,
+            a=a_value,
+            rho_ambient=rho_ambient,
+        )
+        return {
+            "start": state,
+            "linear1": linear1_state,
+            "nonlinear": nonlinear_state,
+            "sponge": sponge_state,
+            "linear2": linear2_state,
+        }
 
     def step(
         self,
@@ -150,20 +236,13 @@ class MatterSplitStepSolver:
         external_potential: torch.Tensor | None = None,
         node_amplitude_mask: torch.Tensor | None = None,
     ) -> MatterState:
-        a_value = self.geometry.equilibrium_a(rho_ambient, initial_guess=state.a)
-        confinement_center = self.estimate_defect_center(state.psi_modes)
-        psi_half = self.linear_half_step(state.psi_modes, -0.5j * dt)
-        psi_full = self.nonlinear_full_step(
-            psi_half,
-            -1.0j * dt,
-            a_value,
+        return self.step_components(
+            state,
+            dt,
             rho_ambient,
             external_potential=external_potential,
-            confinement_center=confinement_center,
             node_amplitude_mask=node_amplitude_mask,
-        )
-        psi_next = self.linear_half_step(psi_full, -0.5j * dt)
-        return MatterState(psi_modes=psi_next, time=state.time + dt, step=state.step + 1, a=a_value, rho_ambient=rho_ambient)
+        )["linear2"]
 
     def step_imaginary(
         self,
