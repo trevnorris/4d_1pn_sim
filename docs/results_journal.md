@@ -1227,3 +1227,55 @@ Purpose:
 - avoid wasting a duplicate run at `0.15`,
 - test whether the optimum lies below `0.15`,
 - keep the launch target fixed until the low-trap sweet spot is mapped well enough to justify a velocity retune.
+
+### Run 031: trap sweep conclusion and velocity pivot
+
+Completed refinement results:
+
+- `trap_strength_r = 0.05`
+  - runtime abort at `t = 6.72` on `min_coherence`
+  - maximum relative energy drift `= 4.942921e-03`
+  - maximum relative angular-momentum drift `= 2.247556e-03`
+  - mean coherence `= 0.951961`
+- `trap_strength_r = 0.10`
+  - runtime abort at `t = 6.72` on `min_coherence`
+  - maximum relative energy drift `= 9.297917e-03`
+  - maximum relative angular-momentum drift `= 4.217250e-03`
+  - mean coherence `= 0.981197`
+- `trap_strength_r = 0.125`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 9.789584e-02`
+  - maximum relative angular-momentum drift `= 4.673891e-02`
+  - mean coherence `= 0.991765`
+- `trap_strength_r = 0.15`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 1.168828e-01`
+  - maximum relative angular-momentum drift `= 5.566299e-02`
+  - mean coherence `= 0.994783`
+- `trap_strength_r = 0.175`
+  - completed the full `4096` steps with no runtime abort
+  - maximum relative energy drift `= 1.359852e-01`
+  - maximum relative angular-momentum drift `= 6.465436e-02`
+  - mean coherence `= 0.996795`
+
+Interpretation:
+
+- The trap scan is now informative enough to change levers.
+- `trap_strength_r = 0.125` is the best overall tradeoff seen so far.
+- `trap_strength_r = 0.15` is the best nearby higher-coherence alternative.
+- Values below `0.125` are too weak and deconfine the defect.
+- The next likely improvement is not another trap-only sweep; it is a modest launch-speed reduction on top of the two best trap candidates, because these branches spend much of the run at radii slightly above the target `r_p = 16`.
+
+Prepared next branch:
+
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_velocity_t0125_v097.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_velocity_t0125_v0985.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_velocity_t0150_v097.json`
+- `configs/local/exp03_newtonian_bound_orbit_320_screen_velocity_t0150_v0985.json`
+- `scripts/run_exp03_newtonian_bound_orbit_320_velocity_screen.sh`
+
+Purpose:
+
+- keep the best trap settings fixed,
+- reduce the launch speed slightly,
+- test whether a cooler orbit family improves both COM conservation and the coherence tradeoff.

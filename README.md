@@ -132,6 +132,12 @@ Follow-up refinement screen around the current low-trap optimum:
 ./scripts/run_exp03_newtonian_bound_orbit_320_trap_refine_screen.sh
 ```
 
+Velocity screen on top of the best trap candidates:
+
+```bash
+./scripts/run_exp03_newtonian_bound_orbit_320_velocity_screen.sh
+```
+
 ## Runtime guidance
 
 - The `256^3` long-orbit PDE branch is a serious run, not a quick local sanity check.
