@@ -11,6 +11,7 @@ Implemented today:
 - matter-only split-step solver in `x,y,z` times Hermite modes
 - one-DOF adiabatic geometry closure for `a(t)` with fixed `L = Lambda * a`
 - single-defect Experiment 1 closure regression
+- single-heavy-source inflow calibration branch
 - static-background infall resolution sweep
 - tracer-matched `256^3` short-arc controls
 - shared ODE/PDE orbit diagnostics
@@ -68,6 +69,12 @@ Experiment 1 closure regression:
 ```bash
 python -m src.experiments.exp01_single_defect_response --config configs/local/exp01_debug.json
 python -m src.scripts.summarize_run --run-dir outputs/runs/exp01_debug
+```
+
+Single heavy-source inflow calibration on CUDA:
+
+```bash
+./scripts/run_exp01_single_heavy_source_inflow_320_cuda.sh
 ```
 
 ODE Newtonian reference:

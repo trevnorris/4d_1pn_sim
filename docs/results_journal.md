@@ -1346,3 +1346,31 @@ Purpose:
 - wait for those four `summary.json` files to appear,
 - then spend the remaining server time on two longer `12288`-step confirmations at the two most plausible middle velocities,
 - still avoid large checkpoint artifacts so the cloud volume does not fill up overnight.
+
+### Run 033: prepared live heavy-source inflow calibration branch
+
+Prepared new branch:
+
+- `src/experiments/exp01_single_heavy_source_inflow.py`
+- `src/physics/source_inflow.py`
+- `configs/local/exp01_single_heavy_source_inflow_320_cuda.json`
+- `scripts/run_exp01_single_heavy_source_inflow_320_cuda.sh`
+
+Purpose:
+
+- move off the frozen-background orbit branch as the main discovery path,
+- calibrate a single centered heavy defect as a live source before introducing a second body,
+- measure sparse shell inflow, core mass, ambient-density drift, leakage, coherence, and higher-mode contamination in one run,
+- keep the current static-background orbit machinery as a control rather than the main source-sector branch.
+
+Implementation notes:
+
+- shell inflow is estimated from a mode-summed 3D current on thin spherical bands, sampled sparsely to keep the A40 path practical,
+- the branch supports optional boundary sponge and reservoir refill controls, but the initial prepared CUDA config keeps refill disabled,
+- the initial `320^3 / L=60` config uses a heavier relaxed defect (`target_norm = 6.0`) and reports shell inflow at radii `1.5, 2.5, 4, 6, 8, 12`.
+
+Scientific intent:
+
+- this branch does not yet test two-body gravity,
+- it calibrates whether a live heavy defect can act as a stable source/inflow object in the boxed medium,
+- if that source calibration is interpretable, the next branch should add a light defect and test radial infall against the Newtonian `1/r^2` oracle using the same live-source protocol.
