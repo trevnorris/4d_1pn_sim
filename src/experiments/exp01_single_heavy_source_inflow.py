@@ -19,6 +19,74 @@ from src.physics.open_system import (
 from src.physics.source_inflow import sample_source_inflow_metrics, summarize_source_inflow_series
 
 
+def _empty_source_history() -> dict[str, list]:
+    return {
+        "time": [],
+        "center": [],
+        "total_norm": [],
+        "box_mean_density": [],
+        "compactness": [],
+        "bound_mass_fraction": [],
+        "core_mass": [],
+        "core_mean_density": [],
+        "ambient_mean_density": [],
+        "coherence": [],
+        "higher_mode_fraction": [],
+        "mean_leakage": [],
+        "signed_leakage_mean": [],
+        "shell_inflow_rates": [],
+        "shell_mean_densities": [],
+        "refill_delta_norm": [],
+        "refill_cumulative_norm": [],
+    }
+
+
+def _append_source_history(
+    history: dict[str, list],
+    metrics: dict[str, object],
+    refill_metrics: dict[str, float],
+    time_value: float,
+) -> None:
+    history["time"].append(float(time_value))
+    history["center"].append(list(metrics["center"]))
+    history["total_norm"].append(float(metrics["total_norm"]))
+    history["box_mean_density"].append(float(metrics["box_mean_density"]))
+    history["compactness"].append(float(metrics["radius_of_gyration"]))
+    history["bound_mass_fraction"].append(float(metrics["bound_mass_fraction"]))
+    history["core_mass"].append(float(metrics["core_mass"]))
+    history["core_mean_density"].append(float(metrics["core_mean_density"]))
+    history["ambient_mean_density"].append(float(metrics["ambient_mean_density"]))
+    history["coherence"].append(float(metrics["coherence"]))
+    history["higher_mode_fraction"].append(float(metrics["higher_mode_fraction"]))
+    history["mean_leakage"].append(float(metrics["mean_leakage"]))
+    history["signed_leakage_mean"].append(float(metrics["signed_leakage_mean"]))
+    history["shell_inflow_rates"].append([float(value) for value in metrics["shell_inflow_rates"]])
+    history["shell_mean_densities"].append([float(value) for value in metrics["shell_mean_densities"]])
+    history["refill_delta_norm"].append(float(refill_metrics["delta_norm_applied"]))
+    history["refill_cumulative_norm"].append(float(refill_metrics["cumulative_refill_norm"]))
+
+
+def _history_to_summary(history: dict[str, list], shell_radii: list[float]) -> dict[str, object] | None:
+    if not history["time"]:
+        return None
+    return summarize_source_inflow_series(
+        shell_radii=shell_radii,
+        shell_inflow_rates=np.asarray(history["shell_inflow_rates"], dtype=np.float64),
+        shell_mean_densities=np.asarray(history["shell_mean_densities"], dtype=np.float64),
+        total_norm=np.asarray(history["total_norm"], dtype=np.float64),
+        box_mean_density=np.asarray(history["box_mean_density"], dtype=np.float64),
+        ambient_mean_density=np.asarray(history["ambient_mean_density"], dtype=np.float64),
+        core_mass=np.asarray(history["core_mass"], dtype=np.float64),
+        core_mean_density=np.asarray(history["core_mean_density"], dtype=np.float64),
+        coherence=np.asarray(history["coherence"], dtype=np.float64),
+        higher_mode_fraction=np.asarray(history["higher_mode_fraction"], dtype=np.float64),
+        compactness=np.asarray(history["compactness"], dtype=np.float64),
+        bound_mass_fraction_series=np.asarray(history["bound_mass_fraction"], dtype=np.float64),
+        mean_leakage=np.asarray(history["mean_leakage"], dtype=np.float64),
+        signed_leakage_mean=np.asarray(history["signed_leakage_mean"], dtype=np.float64),
+    )
+
+
 def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     config = load_json_config(config_path)
     seed = int(config["seed"])
@@ -33,9 +101,15 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     rho0 = float(config["geometry"]["reference_rho"])
     dt = float(config["solver"]["dt"])
     experiment_config = dict(config["experiment"])
+    conditioning_steps = max(0, int(experiment_config.get("conditioning_steps", 0)))
     evolution_steps = int(experiment_config["evolution_steps"])
     metric_stride = max(1, int(experiment_config.get("metric_stride", 64)))
     progress_stride = max(1, int(experiment_config.get("progress_stride", 512)))
+    conditioning_metric_stride = max(1, int(experiment_config.get("conditioning_metric_stride", metric_stride)))
+    conditioning_progress_stride = max(1, int(experiment_config.get("conditioning_progress_stride", progress_stride)))
+    conditioning_ramp_refill = bool(experiment_config.get("conditioning_ramp_refill", conditioning_steps > 0))
+    conditioning_ramp_fraction = float(experiment_config.get("conditioning_ramp_fraction", 0.5))
+    conditioning_ramp_fraction = min(max(conditioning_ramp_fraction, 1.0e-6), 1.0)
     shell_radii = [float(value) for value in experiment_config["shell_radii"]]
     shell_band_width = float(experiment_config["shell_band_width"])
     core_radius = float(experiment_config["core_radius"])
@@ -47,6 +121,7 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
 
     checkpoint_config = dict(config.get("checkpoints", {}))
     save_relaxed = bool(checkpoint_config.get("save_relaxed", True))
+    save_conditioned = bool(checkpoint_config.get("save_conditioned", False))
     save_final = bool(checkpoint_config.get("save_final", False))
 
     boundary_sponge_config = dict(config.get("boundary_sponge", {}))
@@ -80,6 +155,11 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         refill_mode = "uniform"
 
     leakage_matrix = build_mode_leakage_matrix(solver.basis, projection_kernel).to(solver.grid.device)
+    base_refill_cap = (
+        float(refill_controller.max_delta_norm_fraction_per_step)
+        if refill_controller is not None and hasattr(refill_controller, "max_delta_norm_fraction_per_step")
+        else 0.0
+    )
 
     print(f"[exp01-heavy] output_dir={output_dir}")
     if restart_relaxed is not None:
@@ -101,25 +181,81 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
             )
         print("[exp01-heavy] stage=relax done")
 
-    reference_modes = state.psi_modes.clone()
+    relaxed_reference_modes = state.psi_modes.clone()
+    conditioning_history = _empty_source_history()
+    production_history = _empty_source_history()
 
-    time_history: list[float] = []
-    center_history: list[list[float]] = []
-    total_norm_history: list[float] = []
-    box_density_history: list[float] = []
-    compactness_history: list[float] = []
-    bound_mass_history: list[float] = []
-    core_mass_history: list[float] = []
-    core_density_history: list[float] = []
-    ambient_density_history: list[float] = []
-    coherence_history: list[float] = []
-    higher_mode_history: list[float] = []
-    mean_leakage_history: list[float] = []
-    signed_leakage_history: list[float] = []
-    shell_inflow_history: list[list[float]] = []
-    shell_density_history: list[list[float]] = []
-    refill_delta_norm_history: list[float] = []
-    refill_cumulative_history: list[float] = []
+    if conditioning_steps > 0:
+        print(f"[exp01-heavy] stage=condition start steps={conditioning_steps}")
+        ramp_steps = max(1, int(np.ceil(conditioning_steps * conditioning_ramp_fraction)))
+        for idx in range(conditioning_steps):
+            state = solver.step(
+                state,
+                dt=dt,
+                rho_ambient=rho0,
+                node_amplitude_mask=node_amplitude_mask,
+            )
+            refill_metrics = {
+                "delta_norm_applied": 0.0,
+                "cumulative_refill_norm": 0.0,
+            }
+            if refill_controller is not None:
+                if base_refill_cap > 0.0:
+                    if conditioning_ramp_refill:
+                        cap_scale = min(float(idx + 1) / float(ramp_steps), 1.0)
+                        refill_controller.max_delta_norm_fraction_per_step = base_refill_cap * cap_scale
+                    else:
+                        refill_controller.max_delta_norm_fraction_per_step = base_refill_cap
+                state, refill_metrics = refill_controller.apply(solver=solver, state=state, dt=dt)
+
+            should_sample = idx == 0 or idx == conditioning_steps - 1 or (idx + 1) % conditioning_metric_stride == 0
+            if should_sample:
+                metrics = sample_source_inflow_metrics(
+                    solver=solver,
+                    psi_modes=state.psi_modes,
+                    reference_modes=relaxed_reference_modes,
+                    leakage_matrix=leakage_matrix,
+                    shell_radii=shell_radii,
+                    shell_band_width=shell_band_width,
+                    core_radius=core_radius,
+                    ambient_probe_radius=ambient_probe_radius,
+                )
+                _append_source_history(
+                    conditioning_history,
+                    metrics=metrics,
+                    refill_metrics=refill_metrics,
+                    time_value=float(state.time),
+                )
+
+            if (idx + 1) % conditioning_progress_stride == 0 or idx == conditioning_steps - 1:
+                report_inflow = (
+                    float(conditioning_history["shell_inflow_rates"][-1][report_shell_index])
+                    if conditioning_history["shell_inflow_rates"]
+                    else 0.0
+                )
+                report_coherence = float(conditioning_history["coherence"][-1]) if conditioning_history["coherence"] else 0.0
+                print(
+                    f"[exp01-heavy] stage=condition step={state.step} time={state.time:.3f} "
+                    f"inflow_r{shell_radii[report_shell_index]:.2f}={report_inflow:.6e} "
+                    f"coherence={report_coherence:.6f}"
+                )
+
+        if refill_controller is not None and hasattr(refill_controller, "max_delta_norm_fraction_per_step"):
+            refill_controller.max_delta_norm_fraction_per_step = base_refill_cap
+        if save_conditioned:
+            save_checkpoint(
+                output_dir / "checkpoint_conditioned.npz",
+                {
+                    "psi_modes": state.psi_modes,
+                    "time": state.time,
+                    "step": state.step,
+                    "a": state.a,
+                    "rho_ambient": state.rho_ambient,
+                },
+            )
+        print("[exp01-heavy] stage=condition done")
+
+    reference_modes = state.psi_modes.clone()
 
     print("[exp01-heavy] stage=evolve start")
     for idx in range(evolution_steps):
@@ -148,27 +284,20 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
                 core_radius=core_radius,
                 ambient_probe_radius=ambient_probe_radius,
             )
-            time_history.append(float(state.time))
-            center_history.append(list(metrics["center"]))
-            total_norm_history.append(float(metrics["total_norm"]))
-            box_density_history.append(float(metrics["box_mean_density"]))
-            compactness_history.append(float(metrics["radius_of_gyration"]))
-            bound_mass_history.append(float(metrics["bound_mass_fraction"]))
-            core_mass_history.append(float(metrics["core_mass"]))
-            core_density_history.append(float(metrics["core_mean_density"]))
-            ambient_density_history.append(float(metrics["ambient_mean_density"]))
-            coherence_history.append(float(metrics["coherence"]))
-            higher_mode_history.append(float(metrics["higher_mode_fraction"]))
-            mean_leakage_history.append(float(metrics["mean_leakage"]))
-            signed_leakage_history.append(float(metrics["signed_leakage_mean"]))
-            shell_inflow_history.append([float(value) for value in metrics["shell_inflow_rates"]])
-            shell_density_history.append([float(value) for value in metrics["shell_mean_densities"]])
-            refill_delta_norm_history.append(float(refill_metrics["delta_norm_applied"]))
-            refill_cumulative_history.append(float(refill_metrics["cumulative_refill_norm"]))
+            _append_source_history(
+                production_history,
+                metrics=metrics,
+                refill_metrics=refill_metrics,
+                time_value=float(state.time),
+            )
 
         if (idx + 1) % progress_stride == 0 or idx == evolution_steps - 1:
-            report_inflow = float(shell_inflow_history[-1][report_shell_index]) if shell_inflow_history else 0.0
-            report_coherence = float(coherence_history[-1]) if coherence_history else 0.0
+            report_inflow = (
+                float(production_history["shell_inflow_rates"][-1][report_shell_index])
+                if production_history["shell_inflow_rates"]
+                else 0.0
+            )
+            report_coherence = float(production_history["coherence"][-1]) if production_history["coherence"] else 0.0
             print(
                 f"[exp01-heavy] stage=evolve step={state.step} time={state.time:.3f} "
                 f"inflow_r{shell_radii[report_shell_index]:.2f}={report_inflow:.6e} "
@@ -189,51 +318,61 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
             },
         )
 
-    source_inflow_summary = summarize_source_inflow_series(
-        shell_radii=shell_radii,
-        shell_inflow_rates=np.asarray(shell_inflow_history, dtype=np.float64),
-        shell_mean_densities=np.asarray(shell_density_history, dtype=np.float64),
-        total_norm=np.asarray(total_norm_history, dtype=np.float64),
-        box_mean_density=np.asarray(box_density_history, dtype=np.float64),
-        ambient_mean_density=np.asarray(ambient_density_history, dtype=np.float64),
-        core_mass=np.asarray(core_mass_history, dtype=np.float64),
-        core_mean_density=np.asarray(core_density_history, dtype=np.float64),
-        coherence=np.asarray(coherence_history, dtype=np.float64),
-        higher_mode_fraction=np.asarray(higher_mode_history, dtype=np.float64),
-        compactness=np.asarray(compactness_history, dtype=np.float64),
-        bound_mass_fraction_series=np.asarray(bound_mass_history, dtype=np.float64),
-        mean_leakage=np.asarray(mean_leakage_history, dtype=np.float64),
-        signed_leakage_mean=np.asarray(signed_leakage_history, dtype=np.float64),
-    )
+    source_inflow_summary = _history_to_summary(production_history, shell_radii)
+    if source_inflow_summary is None:
+        raise RuntimeError("production history is empty; increase evolution_steps or lower metric_stride")
+    conditioning_summary = _history_to_summary(conditioning_history, shell_radii)
 
     np.savez_compressed(
         output_dir / "timeseries.npz",
         shell_radii=np.asarray(shell_radii, dtype=np.float64),
-        time=np.asarray(time_history, dtype=np.float64),
-        source_center=np.asarray(center_history, dtype=np.float64),
-        total_norm=np.asarray(total_norm_history, dtype=np.float64),
-        box_mean_density=np.asarray(box_density_history, dtype=np.float64),
-        radius_of_gyration=np.asarray(compactness_history, dtype=np.float64),
-        bound_mass_fraction=np.asarray(bound_mass_history, dtype=np.float64),
-        core_mass=np.asarray(core_mass_history, dtype=np.float64),
-        core_mean_density=np.asarray(core_density_history, dtype=np.float64),
-        ambient_mean_density=np.asarray(ambient_density_history, dtype=np.float64),
-        coherence=np.asarray(coherence_history, dtype=np.float64),
-        higher_mode_fraction=np.asarray(higher_mode_history, dtype=np.float64),
-        mean_leakage=np.asarray(mean_leakage_history, dtype=np.float64),
-        signed_leakage_mean=np.asarray(signed_leakage_history, dtype=np.float64),
-        shell_inflow_rates=np.asarray(shell_inflow_history, dtype=np.float64),
-        shell_mean_densities=np.asarray(shell_density_history, dtype=np.float64),
-        refill_delta_norm=np.asarray(refill_delta_norm_history, dtype=np.float64),
-        refill_cumulative_norm=np.asarray(refill_cumulative_history, dtype=np.float64),
+        time=np.asarray(production_history["time"], dtype=np.float64),
+        source_center=np.asarray(production_history["center"], dtype=np.float64),
+        total_norm=np.asarray(production_history["total_norm"], dtype=np.float64),
+        box_mean_density=np.asarray(production_history["box_mean_density"], dtype=np.float64),
+        radius_of_gyration=np.asarray(production_history["compactness"], dtype=np.float64),
+        bound_mass_fraction=np.asarray(production_history["bound_mass_fraction"], dtype=np.float64),
+        core_mass=np.asarray(production_history["core_mass"], dtype=np.float64),
+        core_mean_density=np.asarray(production_history["core_mean_density"], dtype=np.float64),
+        ambient_mean_density=np.asarray(production_history["ambient_mean_density"], dtype=np.float64),
+        coherence=np.asarray(production_history["coherence"], dtype=np.float64),
+        higher_mode_fraction=np.asarray(production_history["higher_mode_fraction"], dtype=np.float64),
+        mean_leakage=np.asarray(production_history["mean_leakage"], dtype=np.float64),
+        signed_leakage_mean=np.asarray(production_history["signed_leakage_mean"], dtype=np.float64),
+        shell_inflow_rates=np.asarray(production_history["shell_inflow_rates"], dtype=np.float64),
+        shell_mean_densities=np.asarray(production_history["shell_mean_densities"], dtype=np.float64),
+        refill_delta_norm=np.asarray(production_history["refill_delta_norm"], dtype=np.float64),
+        refill_cumulative_norm=np.asarray(production_history["refill_cumulative_norm"], dtype=np.float64),
+        conditioning_time=np.asarray(conditioning_history["time"], dtype=np.float64),
+        conditioning_source_center=np.asarray(conditioning_history["center"], dtype=np.float64),
+        conditioning_total_norm=np.asarray(conditioning_history["total_norm"], dtype=np.float64),
+        conditioning_box_mean_density=np.asarray(conditioning_history["box_mean_density"], dtype=np.float64),
+        conditioning_radius_of_gyration=np.asarray(conditioning_history["compactness"], dtype=np.float64),
+        conditioning_bound_mass_fraction=np.asarray(conditioning_history["bound_mass_fraction"], dtype=np.float64),
+        conditioning_core_mass=np.asarray(conditioning_history["core_mass"], dtype=np.float64),
+        conditioning_core_mean_density=np.asarray(conditioning_history["core_mean_density"], dtype=np.float64),
+        conditioning_ambient_mean_density=np.asarray(conditioning_history["ambient_mean_density"], dtype=np.float64),
+        conditioning_coherence=np.asarray(conditioning_history["coherence"], dtype=np.float64),
+        conditioning_higher_mode_fraction=np.asarray(conditioning_history["higher_mode_fraction"], dtype=np.float64),
+        conditioning_mean_leakage=np.asarray(conditioning_history["mean_leakage"], dtype=np.float64),
+        conditioning_signed_leakage_mean=np.asarray(conditioning_history["signed_leakage_mean"], dtype=np.float64),
+        conditioning_shell_inflow_rates=np.asarray(conditioning_history["shell_inflow_rates"], dtype=np.float64),
+        conditioning_shell_mean_densities=np.asarray(conditioning_history["shell_mean_densities"], dtype=np.float64),
+        conditioning_refill_delta_norm=np.asarray(conditioning_history["refill_delta_norm"], dtype=np.float64),
+        conditioning_refill_cumulative_norm=np.asarray(conditioning_history["refill_cumulative_norm"], dtype=np.float64),
     )
 
     completed_evolution_steps = evolution_steps
     summary = {
         "run_name": config["run_name"],
+        "conditioning_steps": int(conditioning_steps),
+        "conditioning_completed_steps": int(conditioning_steps),
+        "conditioning_ramp_refill": bool(conditioning_ramp_refill and refill_controller is not None and base_refill_cap > 0.0),
+        "conditioning_ramp_fraction": float(conditioning_ramp_fraction),
         "completed_evolution_steps": int(completed_evolution_steps),
         "final_state_step": int(state.step),
         "requested_steps": evolution_steps,
+        "conditioning": conditioning_summary,
         "source_inflow": source_inflow_summary,
         "boundary_sponge_enabled": bool(boundary_sponge_config.get("enabled", False)),
         "reservoir_refill_enabled": refill_controller is not None,
@@ -251,7 +390,7 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     best_shell = report_shell_index
     plain_language = [
         "Single heavy-source inflow calibration summary:",
-        f"- The run completed {completed_evolution_steps} fixed-background steps after source relaxation.",
+        f"- The run completed {conditioning_steps} conditioning steps and {completed_evolution_steps} measured fixed-background steps after source relaxation.",
         f"- Reservoir mode = {refill_mode}.",
         f"- Mean coherence = {source_inflow_summary['coherence']['mean']:.6f} and mean higher-mode fraction = {source_inflow_summary['higher_mode_fraction']['mean']:.6e}.",
         f"- Maximum relative total-norm drop = {source_inflow_summary['total_norm']['max_rel_drop']:.6e}.",

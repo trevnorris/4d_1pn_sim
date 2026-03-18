@@ -1511,3 +1511,34 @@ Purpose:
 - keep the current best branch as the anchor: `inner_clearance = 6`, `width = 2`, `cap = 5e-6`,
 - test whether the remaining mixed flux profile is most sensitive to shell width, a gentler cap, or a slightly deeper shell placement,
 - only advance once the source branch is cleaner than the current `inner6_w2_cap5em6` control.
+
+### Run 038: narrow shell-refine result and prepared conditioned long run
+
+Completed narrow shell refinement:
+
+- outputs:
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_shell_refine_inner6_w1p5_cap5em6`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_shell_refine_inner6_w2_cap25em7`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_shell_refine_inner6p5_w2_cap5em6`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_shell_refine_inner7_w2_cap5em6`
+
+Interpretation:
+
+- none of the narrow refinements beat the previous control `inner6_w2_cap5em6` on late-time outer-shell inflow,
+- `inner6_w2_cap25em7` improved source compactness and coherence but weakened the late-time sink signature,
+- the next useful discriminator is no longer another short reservoir screen but a conditioned long confirmation to separate startup slosh from genuine steady recirculation.
+
+Prepared next confirmation:
+
+- `configs/local/exp01_single_heavy_source_inflow_320_conditioned_long.json`
+- `scripts/run_exp01_single_heavy_source_inflow_320_conditioned_long.sh`
+
+Purpose:
+
+- keep the current best branch fixed:
+  - `inner_clearance = 6`,
+  - `width = 2`,
+  - `cap = 5e-6`,
+- add an unmeasured conditioning phase under sponge + boundary reservoir before the production window,
+- ramp the refill cap during conditioning,
+- then run a long measured window to determine whether the shell-flux profile actually settles inward once startup transients are removed.

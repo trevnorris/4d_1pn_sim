@@ -201,3 +201,99 @@ def test_exp01_single_heavy_source_inflow_boundary_reservoir_mode(tmp_path) -> N
 
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["reservoir_refill_mode"] == "boundary"
+
+
+def test_exp01_single_heavy_source_inflow_conditioning_writes_conditioned_outputs(tmp_path) -> None:
+    output_dir = tmp_path / "run_conditioned"
+    config = {
+        "run_name": "exp01_single_heavy_source_inflow_conditioned_test",
+        "seed": 1234,
+        "device": "cpu",
+        "dtype": "float32",
+        "complex_dtype": "complex64",
+        "output_dir": str(output_dir),
+        "overwrite_output": True,
+        "grid": {
+            "shape": [12, 12, 12],
+            "length": [12.0, 12.0, 12.0],
+        },
+        "hermite": {
+            "num_modes": 2,
+            "lambda_w": 1.25,
+            "quadrature_order": 8,
+        },
+        "eos": {
+            "K_eos": 0.08,
+            "n": 5.0,
+        },
+        "geometry": {
+            "lambda_aspect": 3.0,
+            "reference_rho": 1.0,
+            "reference_a": 1.1,
+            "reference_energy_scale": 1.0,
+        },
+        "solver": {
+            "mass": 1.0,
+            "kinetic_prefactor": 0.5,
+            "transverse_prefactor": 0.2,
+            "trap_strength_r": 0.4,
+            "trap_strength_w": 0.9,
+            "dt": 0.02,
+        },
+        "initializer": {
+            "imaginary_dt": 0.01,
+            "steps": 8,
+            "target_norm": 2.0,
+            "gaussian_width": 1.0,
+        },
+        "experiment": {
+            "conditioning_steps": 3,
+            "conditioning_metric_stride": 1,
+            "conditioning_progress_stride": 2,
+            "conditioning_ramp_refill": True,
+            "conditioning_ramp_fraction": 0.5,
+            "evolution_steps": 4,
+            "metric_stride": 2,
+            "progress_stride": 2,
+            "shell_radii": [1.5, 2.5],
+            "shell_band_width": 1.0,
+            "core_radius": 1.5,
+            "ambient_probe_radius": 3.0,
+            "report_shell_index": 0,
+        },
+        "boundary_sponge": {
+            "enabled": False,
+        },
+        "boundary_reservoir": {
+            "enabled": True,
+            "inner_clearance": 1.0,
+            "width": 2.0,
+            "power": 2.0,
+            "compensate_leakage": False,
+            "restore_target_norm": True,
+            "leakage_gain": 1.0,
+            "max_delta_norm_fraction_per_step": 0.0,
+        },
+        "reservoir_refill": {
+            "enabled": False,
+        },
+        "checkpoints": {
+            "save_relaxed": False,
+            "save_conditioned": True,
+            "save_final": False,
+        },
+    }
+    config_path = tmp_path / "config_conditioned.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    run(config_path)
+
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["conditioning_steps"] == 3
+    assert summary["conditioning_completed_steps"] == 3
+    assert summary["conditioning"]["sample_count"] >= 2
+    assert (output_dir / "checkpoint_conditioned.npz").exists()
+
+    timeseries = np.load(output_dir / "timeseries.npz")
+    assert timeseries["conditioning_shell_inflow_rates"].shape[0] >= 2
+    assert timeseries["conditioning_shell_inflow_rates"].shape[1] == 2

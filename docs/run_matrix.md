@@ -27,10 +27,11 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the narrow interior-feed-shell follow-up on the single-heavy-source branch:
-  - `./scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_refine.sh`
-- Compare outer-shell inflow, source compactness, coherence, and total-norm drift across:
-  - slightly narrower feed-shell width,
-  - a gentler refill cap just below the current best branch,
-  - feed-shell starts slightly farther inward than the current best branch.
-- Promote the best source calibration branch only after the shell-flux profile is cleaner and source puffing is reduced.
+- Run the conditioned long confirmation on the current best heavy-source branch:
+  - `./scripts/run_exp01_single_heavy_source_inflow_320_conditioned_long.sh`
+- The run should:
+  - load the relaxed heavy-source checkpoint,
+  - spend `4096` unmeasured steps conditioning under sponge + boundary reservoir,
+  - ramp the refill cap over the first half of conditioning,
+  - then measure `12288` production steps from the conditioned state.
+- Promote the source branch only if the outer-shell flux stays inward after conditioning rather than merely sloshing around the startup transient.
