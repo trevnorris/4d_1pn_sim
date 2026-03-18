@@ -57,6 +57,7 @@ def build_boundary_reservoir_shape(
     width: float,
     power: float = 2.0,
     inner_clearance: float = 0.0,
+    normalize: bool = True,
 ) -> torch.Tensor:
     if width <= 0.0:
         raise ValueError("boundary reservoir width must be positive")
@@ -80,6 +81,8 @@ def build_boundary_reservoir_shape(
         raise ValueError(
             "boundary reservoir support is empty; adjust width/inner_clearance for the current grid"
         )
+    if not normalize:
+        return raw
     norm_sq = (raw.square().sum() * float(grid.cell_volume)).clamp_min(1.0e-12)
     return raw / torch.sqrt(norm_sq)
 
@@ -102,6 +105,51 @@ def add_boundary_mode0_density(
     updated = psi_modes.clone()
     updated[0] = updated[0] + amplitude * phase.to(psi_modes.dtype) * shape
     return updated
+
+
+def relax_boundary_density_to_target(
+    solver: MatterSplitStepSolver,
+    psi_modes: torch.Tensor,
+    boundary_profile: torch.Tensor,
+    target_density: float,
+    relaxation_fraction: float,
+    max_delta_norm: float = 0.0,
+) -> tuple[torch.Tensor, float]:
+    if relaxation_fraction <= 0.0 or target_density < 0.0:
+        return psi_modes, 0.0
+
+    rho = solver.effective_spatial_density(psi_modes)
+    profile = boundary_profile.to(rho.dtype).clamp_min(0.0)
+    blend = (float(relaxation_fraction) * profile).clamp(0.0, 1.0)
+    target = torch.full_like(rho, float(target_density))
+    desired_rho = rho + blend * (target - rho)
+    delta_rho = desired_rho - rho
+    delta_norm = float(delta_rho.sum() * float(solver.grid.cell_volume))
+
+    if max_delta_norm > 0.0 and abs(delta_norm) > float(max_delta_norm):
+        scale = float(max_delta_norm) / max(abs(delta_norm), 1.0e-12)
+        desired_rho = rho + delta_rho * scale
+        delta_rho = desired_rho - rho
+        delta_norm = float(delta_rho.sum() * float(solver.grid.cell_volume))
+
+    rho_eps = 1.0e-16
+    updated = psi_modes.clone()
+    nonzero_mask = rho > rho_eps
+    if bool(nonzero_mask.any()):
+        scale = torch.ones_like(rho)
+        scale[nonzero_mask] = torch.sqrt((desired_rho[nonzero_mask] / rho[nonzero_mask]).clamp_min(0.0))
+        updated = updated * scale.unsqueeze(0).to(psi_modes.dtype)
+
+    zero_fill_mask = (~nonzero_mask) & (desired_rho > rho_eps) & (profile > 0.0)
+    if bool(zero_fill_mask.any()):
+        psi0 = updated[0]
+        phase_anchor = torch.ones_like(psi0)
+        nonzero_mode0 = psi0.abs() > 1.0e-12
+        phase_anchor[nonzero_mode0] = psi0[nonzero_mode0] / psi0[nonzero_mode0].abs()
+        psi0[zero_fill_mask] = torch.sqrt(desired_rho[zero_fill_mask]).to(psi_modes.dtype) * phase_anchor[zero_fill_mask]
+        updated[0] = psi0
+
+    return updated, delta_norm
 
 
 @dataclass
@@ -251,6 +299,75 @@ class BoundaryReservoirRefill:
             "mean_leakage": abs_leakage_mean,
             "delta_norm_from_leakage": float(delta_norm_from_leakage),
             "delta_norm_from_deficit": float(delta_norm_from_deficit),
+            "delta_norm_applied": float(delta_norm),
+            "cumulative_refill_norm": float(self.cumulative_refill_norm),
+        }
+
+
+@dataclass
+class BoundaryDensityRelaxation:
+    boundary_profile: torch.Tensor
+    target_density: float
+    target_norm: float
+    relaxation_fraction: float
+    max_delta_norm_fraction_per_step: float
+    stage_scale: float = 1.0
+    cumulative_refill_norm: float = 0.0
+
+    @classmethod
+    def from_config(
+        cls,
+        solver: MatterSplitStepSolver,
+        target_norm: float,
+        config: dict[str, Any],
+    ) -> "BoundaryDensityRelaxation":
+        volume = float(solver.grid.length[0] * solver.grid.length[1] * solver.grid.length[2])
+        target_density = float(config.get("target_density", float(target_norm) / max(volume, 1.0e-12)))
+        return cls(
+            boundary_profile=build_boundary_reservoir_shape(
+                solver.grid,
+                width=float(config["width"]),
+                power=float(config.get("power", 2.0)),
+                inner_clearance=float(config.get("inner_clearance", 0.0)),
+                normalize=False,
+            ).to(solver.grid.device),
+            target_density=target_density,
+            target_norm=float(target_norm),
+            relaxation_fraction=float(config.get("relaxation_fraction", 0.2)),
+            max_delta_norm_fraction_per_step=float(config.get("max_delta_norm_fraction_per_step", 0.0)),
+        )
+
+    def apply(
+        self,
+        solver: MatterSplitStepSolver,
+        state: MatterState,
+        dt: float,
+    ) -> tuple[MatterState, dict[str, float]]:
+        del dt
+        max_delta_norm = 0.0
+        if self.max_delta_norm_fraction_per_step > 0.0:
+            max_delta_norm = self.max_delta_norm_fraction_per_step * self.target_norm
+        psi_modes, delta_norm = relax_boundary_density_to_target(
+            solver=solver,
+            psi_modes=state.psi_modes,
+            boundary_profile=self.boundary_profile,
+            target_density=self.target_density,
+            relaxation_fraction=self.relaxation_fraction * self.stage_scale,
+            max_delta_norm=max_delta_norm,
+        )
+        self.cumulative_refill_norm += float(delta_norm)
+        updated_state = MatterState(
+            psi_modes=psi_modes,
+            time=float(state.time),
+            step=int(state.step),
+            a=float(state.a),
+            rho_ambient=float(state.rho_ambient),
+        )
+        return updated_state, {
+            "signed_leakage_mean": 0.0,
+            "mean_leakage": 0.0,
+            "delta_norm_from_leakage": 0.0,
+            "delta_norm_from_deficit": float(delta_norm),
             "delta_norm_applied": float(delta_norm),
             "cumulative_refill_norm": float(self.cumulative_refill_norm),
         }

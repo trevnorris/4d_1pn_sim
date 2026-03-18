@@ -1542,3 +1542,28 @@ Purpose:
 - add an unmeasured conditioning phase under sponge + boundary reservoir before the production window,
 - ramp the refill cap during conditioning,
 - then run a long measured window to determine whether the shell-flux profile actually settles inward once startup transients are removed.
+
+### Run 039: conditioned long result and prepared boundary-relaxation redesign
+
+Completed conditioned long confirmation on the additive shell-refill branch:
+
+- output:
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_conditioned_long`
+
+Interpretation:
+
+- conditioning improved the startup window,
+- but the measured production run still fell back into a mixed-sign shell-flux profile,
+- so the additive shell-source refill is no longer plausibly limited just by startup slosh.
+
+Prepared next branch:
+
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_relaxation_conditioned_long.json`
+- `scripts/run_exp01_single_heavy_source_inflow_320_boundary_relaxation_conditioned_long.sh`
+
+Purpose:
+
+- replace the additive shell-source refill with a boundary relaxation collar that nudges the edge-region density toward the target ambient level while preserving local phase,
+- keep the conditioning stage,
+- use stronger conditioning relaxation and weaker production relaxation,
+- test whether a bath-like boundary treatment converges more cleanly than the old coherent shell-source refill.

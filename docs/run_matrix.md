@@ -27,11 +27,11 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the conditioned long confirmation on the current best heavy-source branch:
-  - `./scripts/run_exp01_single_heavy_source_inflow_320_conditioned_long.sh`
+- Run the conditioned long confirmation using the boundary-relaxation collar redesign:
+  - `./scripts/run_exp01_single_heavy_source_inflow_320_boundary_relaxation_conditioned_long.sh`
 - The run should:
   - load the relaxed heavy-source checkpoint,
-  - spend `4096` unmeasured steps conditioning under sponge + boundary reservoir,
-  - ramp the refill cap over the first half of conditioning,
+  - spend `4096` unmeasured steps conditioning under sponge + boundary relaxation,
+  - use stronger conditioning refill and quieter production refill,
   - then measure `12288` production steps from the conditioned state.
-- Promote the source branch only if the outer-shell flux stays inward after conditioning rather than merely sloshing around the startup transient.
+- Promote the source branch only if the outer-shell flux stays inward after conditioning rather than falling back into mixed-sign production behavior.

@@ -1,5 +1,6 @@
 import torch
 import pytest
+import numpy as np
 
 from src.core.grids import SpatialGrid3D
 from src.core.hermite import HermiteBasis
@@ -9,6 +10,7 @@ from src.physics.eos import PolytropicEOS
 from src.physics.geometry import AdiabaticGeometryClosure
 from src.physics.matter_gnls import MatterSplitStepSolver, MatterState
 from src.physics.open_system import (
+    BoundaryDensityRelaxation,
     BoundaryReservoirRefill,
     UniformReservoirRefill,
     add_uniform_mode0_density,
@@ -16,6 +18,7 @@ from src.physics.open_system import (
     build_boundary_reservoir_shape,
     build_mode_leakage_matrix,
     projected_leakage_source_from_modes,
+    relax_boundary_density_to_target,
 )
 
 
@@ -163,6 +166,64 @@ def test_boundary_reservoir_refill_restores_target_norm() -> None:
     assert abs(float(solver.total_norm(updated_state.psi_modes)) - target_norm) < 1.0e-12
     assert metrics["delta_norm_from_deficit"] > 0.0
     assert metrics["delta_norm_applied"] > 0.0
+
+
+def test_relax_boundary_density_to_target_populates_edge_collar() -> None:
+    solver = _build_solver()
+    psi_modes = torch.zeros((4, 4, 4, 4), dtype=torch.complex128)
+    profile = build_boundary_reservoir_shape(
+        solver.grid,
+        width=2.0,
+        power=2.0,
+        inner_clearance=1.0,
+        normalize=False,
+    )
+
+    updated, delta_norm = relax_boundary_density_to_target(
+        solver=solver,
+        psi_modes=psi_modes,
+        boundary_profile=profile,
+        target_density=1.0e-3,
+        relaxation_fraction=0.5,
+        max_delta_norm=0.0,
+    )
+
+    rho = solver.effective_spatial_density(updated)
+    peak_index = np.unravel_index(int(profile.argmax().item()), tuple(profile.shape))
+    assert delta_norm > 0.0
+    assert float(rho.max()) > 0.0
+    assert float(rho[peak_index]) > float(
+        rho[solver.grid.shape[0] // 2, solver.grid.shape[1] // 2, solver.grid.shape[2] // 2]
+    )
+
+
+def test_boundary_density_relaxation_caps_net_norm_adjustment() -> None:
+    solver = _build_solver()
+    state = MatterState(
+        psi_modes=torch.zeros((4, 4, 4, 4), dtype=torch.complex128),
+        time=0.0,
+        step=0,
+        a=1.1,
+        rho_ambient=1.0,
+    )
+    controller = BoundaryDensityRelaxation.from_config(
+        solver=solver,
+        target_norm=1.0,
+        config={
+            "enabled": True,
+            "inner_clearance": 1.0,
+            "width": 2.0,
+            "power": 2.0,
+            "target_density": 1.0e-2,
+            "relaxation_fraction": 1.0,
+            "max_delta_norm_fraction_per_step": 5.0e-2,
+        },
+    )
+
+    updated_state, metrics = controller.apply(solver=solver, state=state, dt=0.1)
+
+    assert float(solver.total_norm(updated_state.psi_modes)) <= 5.0e-2 + 1.0e-12
+    assert metrics["delta_norm_applied"] <= 5.0e-2 + 1.0e-12
 
 
 def test_step_components_matches_step() -> None:

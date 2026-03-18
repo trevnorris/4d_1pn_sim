@@ -12,6 +12,7 @@ from src.core.io import collect_runtime_info, dump_json, ensure_dir
 from src.experiments.common import build_solver, prepare_relaxed_state, state_from_checkpoint
 from src.physics.boundary_sponge import build_boundary_sponge_mask
 from src.physics.open_system import (
+    BoundaryDensityRelaxation,
     BoundaryReservoirRefill,
     UniformReservoirRefill,
     build_mode_leakage_matrix,
@@ -110,6 +111,8 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     conditioning_ramp_refill = bool(experiment_config.get("conditioning_ramp_refill", conditioning_steps > 0))
     conditioning_ramp_fraction = float(experiment_config.get("conditioning_ramp_fraction", 0.5))
     conditioning_ramp_fraction = min(max(conditioning_ramp_fraction, 1.0e-6), 1.0)
+    conditioning_refill_scale = float(experiment_config.get("conditioning_refill_scale", 1.0))
+    production_refill_scale = float(experiment_config.get("production_refill_scale", 1.0))
     shell_radii = [float(value) for value in experiment_config["shell_radii"]]
     shell_band_width = float(experiment_config["shell_band_width"])
     core_radius = float(experiment_config["core_radius"])
@@ -135,9 +138,17 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
 
     refill_config = dict(config.get("reservoir_refill", {}))
     boundary_reservoir_config = dict(config.get("boundary_reservoir", {}))
+    boundary_relaxation_config = dict(config.get("boundary_relaxation", {}))
     refill_controller = None
     refill_mode = "disabled"
-    if bool(boundary_reservoir_config.get("enabled", False)):
+    if bool(boundary_relaxation_config.get("enabled", False)):
+        refill_controller = BoundaryDensityRelaxation.from_config(
+            solver=solver,
+            target_norm=float(config["initializer"]["target_norm"]),
+            config=boundary_relaxation_config,
+        )
+        refill_mode = "boundary_relaxation"
+    elif bool(boundary_reservoir_config.get("enabled", False)):
         refill_controller = BoundaryReservoirRefill.from_config(
             solver=solver,
             projection_kernel=projection_kernel,
@@ -160,6 +171,8 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         if refill_controller is not None and hasattr(refill_controller, "max_delta_norm_fraction_per_step")
         else 0.0
     )
+    if refill_controller is not None and hasattr(refill_controller, "stage_scale"):
+        refill_controller.stage_scale = float(production_refill_scale)
 
     print(f"[exp01-heavy] output_dir={output_dir}")
     if restart_relaxed is not None:
@@ -200,12 +213,18 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
                 "cumulative_refill_norm": 0.0,
             }
             if refill_controller is not None:
+                if hasattr(refill_controller, "stage_scale"):
+                    if conditioning_ramp_refill:
+                        ramp_scale = min(float(idx + 1) / float(ramp_steps), 1.0)
+                    else:
+                        ramp_scale = 1.0
+                    refill_controller.stage_scale = conditioning_refill_scale * ramp_scale
                 if base_refill_cap > 0.0:
                     if conditioning_ramp_refill:
                         cap_scale = min(float(idx + 1) / float(ramp_steps), 1.0)
                         refill_controller.max_delta_norm_fraction_per_step = base_refill_cap * cap_scale
                     else:
-                        refill_controller.max_delta_norm_fraction_per_step = base_refill_cap
+                        refill_controller.max_delta_norm_fraction_per_step = base_refill_cap * conditioning_refill_scale
                 state, refill_metrics = refill_controller.apply(solver=solver, state=state, dt=dt)
 
             should_sample = idx == 0 or idx == conditioning_steps - 1 or (idx + 1) % conditioning_metric_stride == 0
@@ -240,8 +259,11 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
                     f"coherence={report_coherence:.6f}"
                 )
 
-        if refill_controller is not None and hasattr(refill_controller, "max_delta_norm_fraction_per_step"):
-            refill_controller.max_delta_norm_fraction_per_step = base_refill_cap
+        if refill_controller is not None:
+            if hasattr(refill_controller, "max_delta_norm_fraction_per_step"):
+                refill_controller.max_delta_norm_fraction_per_step = base_refill_cap * production_refill_scale
+            if hasattr(refill_controller, "stage_scale"):
+                refill_controller.stage_scale = float(production_refill_scale)
         if save_conditioned:
             save_checkpoint(
                 output_dir / "checkpoint_conditioned.npz",
@@ -256,6 +278,12 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         print("[exp01-heavy] stage=condition done")
 
     reference_modes = state.psi_modes.clone()
+
+    if refill_controller is not None:
+        if hasattr(refill_controller, "max_delta_norm_fraction_per_step"):
+            refill_controller.max_delta_norm_fraction_per_step = base_refill_cap * production_refill_scale
+        if hasattr(refill_controller, "stage_scale"):
+            refill_controller.stage_scale = float(production_refill_scale)
 
     print("[exp01-heavy] stage=evolve start")
     for idx in range(evolution_steps):
@@ -367,8 +395,14 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         "run_name": config["run_name"],
         "conditioning_steps": int(conditioning_steps),
         "conditioning_completed_steps": int(conditioning_steps),
-        "conditioning_ramp_refill": bool(conditioning_ramp_refill and refill_controller is not None and base_refill_cap > 0.0),
+        "conditioning_ramp_refill": bool(
+            conditioning_ramp_refill
+            and refill_controller is not None
+            and (base_refill_cap > 0.0 or hasattr(refill_controller, "stage_scale"))
+        ),
         "conditioning_ramp_fraction": float(conditioning_ramp_fraction),
+        "conditioning_refill_scale": float(conditioning_refill_scale),
+        "production_refill_scale": float(production_refill_scale),
         "completed_evolution_steps": int(completed_evolution_steps),
         "final_state_step": int(state.step),
         "requested_steps": evolution_steps,

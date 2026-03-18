@@ -107,6 +107,12 @@ Conditioned long confirmation on the current best heavy-source calibration branc
 ./scripts/run_exp01_single_heavy_source_inflow_320_conditioned_long.sh
 ```
 
+Conditioned long confirmation using the boundary-relaxation collar redesign:
+
+```bash
+./scripts/run_exp01_single_heavy_source_inflow_320_boundary_relaxation_conditioned_long.sh
+```
+
 ODE Newtonian reference:
 
 ```bash
