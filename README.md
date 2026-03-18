@@ -83,6 +83,12 @@ Single heavy-source inflow calibration with boundary-fed reservoir refill:
 ./scripts/run_exp01_single_heavy_source_inflow_320_boundary_reservoir_cuda.sh
 ```
 
+Boundary-reservoir tuning screen for the live heavy-source calibration:
+
+```bash
+./scripts/run_exp01_single_heavy_source_inflow_320_boundary_screen.sh
+```
+
 ODE Newtonian reference:
 
 ```bash

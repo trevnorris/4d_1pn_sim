@@ -1409,3 +1409,43 @@ Implementation notes:
 - the new operator injects only into the mode-0 field using an edge-localized symmetric shape with exact norm bookkeeping,
 - it reuses the saved relaxed baseline checkpoint if present,
 - the old no-refill branch remains available as the direct control.
+
+### Run 035: boundary-reservoir result and prepared tuning screen
+
+Completed boundary-reservoir comparison:
+
+- output: `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_reservoir_cuda`
+- box norm was held effectively fixed:
+  - max relative total-norm drop `= 0`
+- mean coherence remained high:
+  - `0.999853`
+- positive outer-shell inflow appeared:
+  - mean shell inflow at `r = 6` `= 2.639182e-04`
+  - outer shells `r = 8, 12` also became positive on average
+
+Interpretation:
+
+- the boundary-fed reservoir is doing real physical work and is much more promising than the old uniform refill idea,
+- but the first tuned branch also puffed the source up too much:
+  - mean compactness increased from about `1.64` in the no-refill control to about `2.12`,
+- and the shell-flux profile is still mixed:
+  - outer shells are inward on average,
+  - inner/intermediate shells still show outward or sign-changing behavior.
+
+Prepared next screen:
+
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_screen_cap1em4.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_screen_cap5em5.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_screen_narrow.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_screen_steep.json`
+- `scripts/run_exp01_single_heavy_source_inflow_320_boundary_screen.sh`
+
+Purpose:
+
+- keep the heavy source and baseline relaxation fixed,
+- soften the boundary reservoir so it preserves the new outer inflow while reducing source puffing,
+- compare:
+  - gentler per-step refill caps,
+  - narrower edge-feed width,
+  - steeper boundary profile,
+- pick the cleanest source-calibration branch before introducing a second body.
