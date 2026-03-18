@@ -1449,3 +1449,35 @@ Purpose:
   - narrower edge-feed width,
   - steeper boundary profile,
 - pick the cleanest source-calibration branch before introducing a second body.
+
+### Run 036: boundary-screen readout and prepared interior-shell follow-up
+
+Completed first boundary-reservoir tuning screen:
+
+- outputs:
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_screen_cap1em4`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_screen_cap5em5`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_screen_narrow`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_screen_steep`
+
+Interpretation:
+
+- the two gentler-cap runs were effectively identical to the original boundary-reservoir branch,
+- so the per-step cap was not the active knob at `1e-4` or `5e-5`,
+- the narrower and steeper feed shapes changed the run slightly but did not fix the mixed shell-flux profile,
+- the next real lever is refill placement: separate the feed region from the explicit sponge zone instead of refilling across the full boundary band.
+
+Prepared next screen:
+
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w2_cap1em5.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w4_cap1em5.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner8_w2_cap1em5.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w2_cap5em6.json`
+- `scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_screen.sh`
+
+Purpose:
+
+- keep the heavy source and baseline relaxation fixed,
+- move the refill support into an interior shell that starts at or beyond the sponge boundary,
+- test whether a quieter reservoir geometry can preserve the positive outer-shell inflow while reducing source puffing and inner-shell outward recirculation,
+- only promote a source branch once the integrated shell flux is cleaner across radius.

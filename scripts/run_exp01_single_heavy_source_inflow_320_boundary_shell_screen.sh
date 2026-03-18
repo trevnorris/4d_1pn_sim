@@ -11,14 +11,14 @@ if [[ ! -f "$RELAXED" ]]; then
 fi
 
 CONFIGS=(
-  configs/local/exp01_single_heavy_source_inflow_320_boundary_screen_cap1em4.json
-  configs/local/exp01_single_heavy_source_inflow_320_boundary_screen_cap5em5.json
-  configs/local/exp01_single_heavy_source_inflow_320_boundary_screen_narrow.json
-  configs/local/exp01_single_heavy_source_inflow_320_boundary_screen_steep.json
+  configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w2_cap1em5.json
+  configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w4_cap1em5.json
+  configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner8_w2_cap1em5.json
+  configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w2_cap5em6.json
 )
 
 for config in "${CONFIGS[@]}"; do
-  echo "[boundary-screen] running $config"
+  echo "[boundary-shell-screen] running $config"
   PYTHONUNBUFFERED=1 python -m src.experiments.exp01_single_heavy_source_inflow \
     --config "$config" \
     --restart-relaxed "$RELAXED"

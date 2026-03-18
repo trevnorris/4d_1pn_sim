@@ -89,6 +89,12 @@ Boundary-reservoir tuning screen for the live heavy-source calibration:
 ./scripts/run_exp01_single_heavy_source_inflow_320_boundary_screen.sh
 ```
 
+Interior-shell boundary-reservoir tuning screen for the live heavy-source calibration:
+
+```bash
+./scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_screen.sh
+```
+
 ODE Newtonian reference:
 
 ```bash

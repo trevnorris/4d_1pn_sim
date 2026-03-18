@@ -17,7 +17,7 @@ This file tracks the experiment ladder status at a glance.
 | PDE Newtonian short-arc control (`256^3`, no dressing) | `complete` | Passed tracer-matched short-arc acceptance gate |
 | PDE Newtonian short-arc comparison (`256^3`, with dressing) | `complete` | Also passed; differential signal versus control is tiny |
 | PDE Newtonian long bound orbit | `active` | Implemented and CUDA-validated end-to-end; the first guarded `256^3 / L=48` and `320^3 / L=60` no-refill/no-sponge runs both aborted early on COM drift while the defect remained coherent. The `320^3` control screen then showed `sponge_only` is clearly best, while the first uniform refill law degrades the orbit. |
-| Live heavy-source inflow calibration | `active` | Implemented and two initial branches completed: the no-refill control keeps the source coherent but shows almost no outer inflow, while the first boundary-fed reservoir restores box norm and creates positive outer-shell inflow but puffs the source up too much. The next step is a small boundary-reservoir tuning screen. |
+| Live heavy-source inflow calibration | `active` | Implemented and multiple initial branches completed: the no-refill control keeps the source coherent but shows almost no outer inflow, the first boundary-fed reservoir restores box norm and creates positive outer-shell inflow but puffs the source up too much, and the first cap/shape screen showed the cap was not the active knob. The next step is an interior-feed-shell reservoir screen that separates refill placement from the sponge zone. |
 | ODE Newtonian reference | `complete` | Fitter / shared orbit analysis give near-zero drift with excellent conservation |
 | ODE 1PN reference | `blocked` | Waiting until Newtonian reference and shared diagnostics are in place |
 | PDE 1PN static self-sector test | `blocked` | Deferred until long Newtonian PDE orbit is clean |
@@ -27,10 +27,10 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the boundary-reservoir tuning screen on the single-heavy-source branch:
-  - `./scripts/run_exp01_single_heavy_source_inflow_320_boundary_screen.sh`
+- Run the interior-feed-shell reservoir screen on the single-heavy-source branch:
+  - `./scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_screen.sh`
 - Compare outer-shell inflow, source compactness, coherence, and total-norm drift across:
-  - gentler refill caps,
-  - narrower boundary feed width,
-  - steeper boundary profile.
+  - feed shells that begin at the sponge edge versus farther inward,
+  - narrow versus wider interior feed-shell widths,
+  - genuinely smaller refill caps.
 - Promote the best source calibration branch only after the shell-flux profile is cleaner and source puffing is reduced.

@@ -56,11 +56,14 @@ def build_boundary_reservoir_shape(
     grid: SpatialGrid3D,
     width: float,
     power: float = 2.0,
+    inner_clearance: float = 0.0,
 ) -> torch.Tensor:
     if width <= 0.0:
         raise ValueError("boundary reservoir width must be positive")
     if power <= 0.0:
         raise ValueError("boundary reservoir power must be positive")
+    if inner_clearance < 0.0:
+        raise ValueError("boundary reservoir inner_clearance must be non-negative")
 
     x_grid, y_grid, z_grid = grid.coordinates()
     half_lengths = [0.5 * float(length) for length in grid.length]
@@ -68,7 +71,15 @@ def build_boundary_reservoir_shape(
         torch.minimum(half_lengths[0] - x_grid.abs(), half_lengths[1] - y_grid.abs()),
         half_lengths[2] - z_grid.abs(),
     ).to(grid.real_dtype)
-    raw = ((float(width) - clearance).clamp_min(0.0) / float(width)).pow(float(power))
+    if inner_clearance > 0.0:
+        shell_position = ((clearance - float(inner_clearance)) / float(width)).clamp(0.0, 1.0)
+        raw = (4.0 * shell_position * (1.0 - shell_position)).clamp_min(0.0).pow(float(power))
+    else:
+        raw = ((float(width) - clearance).clamp_min(0.0) / float(width)).pow(float(power))
+    if float(raw.max()) <= 0.0:
+        raise ValueError(
+            "boundary reservoir support is empty; adjust width/inner_clearance for the current grid"
+        )
     norm_sq = (raw.square().sum() * float(grid.cell_volume)).clamp_min(1.0e-12)
     return raw / torch.sqrt(norm_sq)
 
@@ -188,6 +199,7 @@ class BoundaryReservoirRefill:
                 solver.grid,
                 width=float(config["width"]),
                 power=float(config.get("power", 2.0)),
+                inner_clearance=float(config.get("inner_clearance", 0.0)),
             ).to(solver.grid.device),
             target_norm=float(target_norm),
             leakage_gain=float(config.get("leakage_gain", 1.0)),

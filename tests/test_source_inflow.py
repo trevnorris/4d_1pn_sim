@@ -178,6 +178,7 @@ def test_exp01_single_heavy_source_inflow_boundary_reservoir_mode(tmp_path) -> N
         },
         "boundary_reservoir": {
             "enabled": True,
+            "inner_clearance": 1.0,
             "width": 2.0,
             "power": 2.0,
             "compensate_leakage": False,

@@ -1,4 +1,5 @@
 import torch
+import pytest
 
 from src.core.grids import SpatialGrid3D
 from src.core.hermite import HermiteBasis
@@ -116,6 +117,23 @@ def test_boundary_mode0_density_hits_requested_norm_increment() -> None:
     assert abs(float(solver.total_norm(updated)) - delta_norm) < 1.0e-12
 
 
+def test_boundary_reservoir_shape_can_target_interior_shell() -> None:
+    grid = SpatialGrid3D(shape=(16, 16, 16), length=(16.0, 16.0, 16.0), device=torch.device("cpu"), real_dtype=torch.float64)
+    boundary_shape = build_boundary_reservoir_shape(grid, width=2.0, power=2.0, inner_clearance=2.0)
+
+    x_grid, y_grid, z_grid = grid.coordinates()
+    clearance = torch.minimum(
+        torch.minimum(8.0 - x_grid.abs(), 8.0 - y_grid.abs()),
+        8.0 - z_grid.abs(),
+    )
+    max_index = int(boundary_shape.argmax())
+    max_clearance = float(clearance.reshape(-1)[max_index])
+
+    assert float(boundary_shape[0, 0, 0]) == pytest.approx(0.0)
+    assert float(boundary_shape[grid.shape[0] // 2, grid.shape[1] // 2, grid.shape[2] // 2]) == pytest.approx(0.0)
+    assert max_clearance == pytest.approx(3.0, abs=float(grid.dx[0]))
+
+
 def test_boundary_reservoir_refill_restores_target_norm() -> None:
     solver = _build_solver()
     kernel = ProjectionKernel.gaussian(nodes=solver.basis.nodes, quadrature_weights=solver.basis.weights, width=1.25)
@@ -132,6 +150,7 @@ def test_boundary_reservoir_refill_restores_target_norm() -> None:
             "enabled": True,
             "width": 2.0,
             "power": 2.0,
+            "inner_clearance": 1.0,
             "compensate_leakage": False,
             "restore_target_norm": True,
             "leakage_gain": 1.0,
