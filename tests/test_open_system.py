@@ -8,8 +8,11 @@ from src.physics.eos import PolytropicEOS
 from src.physics.geometry import AdiabaticGeometryClosure
 from src.physics.matter_gnls import MatterSplitStepSolver, MatterState
 from src.physics.open_system import (
+    BoundaryReservoirRefill,
     UniformReservoirRefill,
     add_uniform_mode0_density,
+    add_boundary_mode0_density,
+    build_boundary_reservoir_shape,
     build_mode_leakage_matrix,
     projected_leakage_source_from_modes,
 )
@@ -83,6 +86,52 @@ def test_uniform_reservoir_refill_restores_target_norm() -> None:
         target_norm=target_norm,
         config={
             "enabled": True,
+            "compensate_leakage": False,
+            "restore_target_norm": True,
+            "leakage_gain": 1.0,
+            "max_delta_norm_fraction_per_step": 0.0,
+        },
+    )
+
+    updated_state, metrics = refill.apply(solver=solver, state=state, dt=0.1)
+
+    assert abs(float(solver.total_norm(updated_state.psi_modes)) - target_norm) < 1.0e-12
+    assert metrics["delta_norm_from_deficit"] > 0.0
+    assert metrics["delta_norm_applied"] > 0.0
+
+
+def test_boundary_mode0_density_hits_requested_norm_increment() -> None:
+    solver = _build_solver()
+    psi_modes = torch.zeros((4, 4, 4, 4), dtype=torch.complex128)
+    boundary_shape = build_boundary_reservoir_shape(solver.grid, width=2.0, power=2.0)
+    delta_norm = 0.25
+
+    updated = add_boundary_mode0_density(
+        solver,
+        psi_modes,
+        delta_norm=delta_norm,
+        boundary_shape=boundary_shape,
+    )
+
+    assert abs(float(solver.total_norm(updated)) - delta_norm) < 1.0e-12
+
+
+def test_boundary_reservoir_refill_restores_target_norm() -> None:
+    solver = _build_solver()
+    kernel = ProjectionKernel.gaussian(nodes=solver.basis.nodes, quadrature_weights=solver.basis.weights, width=1.25)
+    psi_modes = torch.zeros((4, 4, 4, 4), dtype=torch.complex128)
+    psi_modes[0, 1, 1, 1] = 1.0 + 0.0j
+    state = MatterState(psi_modes=psi_modes * 0.8, time=0.0, step=0, a=1.1, rho_ambient=1.0)
+    target_norm = float(solver.total_norm(psi_modes))
+
+    refill = BoundaryReservoirRefill.from_config(
+        solver=solver,
+        projection_kernel=kernel,
+        target_norm=target_norm,
+        config={
+            "enabled": True,
+            "width": 2.0,
+            "power": 2.0,
             "compensate_leakage": False,
             "restore_target_norm": True,
             "leakage_gain": 1.0,

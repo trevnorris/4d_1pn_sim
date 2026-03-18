@@ -11,7 +11,11 @@ from src.core.config import load_json_config
 from src.core.io import collect_runtime_info, dump_json, ensure_dir
 from src.experiments.common import build_solver, prepare_relaxed_state, state_from_checkpoint
 from src.physics.boundary_sponge import build_boundary_sponge_mask
-from src.physics.open_system import UniformReservoirRefill, build_mode_leakage_matrix
+from src.physics.open_system import (
+    BoundaryReservoirRefill,
+    UniformReservoirRefill,
+    build_mode_leakage_matrix,
+)
 from src.physics.source_inflow import sample_source_inflow_metrics, summarize_source_inflow_series
 
 
@@ -55,14 +59,25 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         )
 
     refill_config = dict(config.get("reservoir_refill", {}))
+    boundary_reservoir_config = dict(config.get("boundary_reservoir", {}))
     refill_controller = None
-    if bool(refill_config.get("enabled", False)):
+    refill_mode = "disabled"
+    if bool(boundary_reservoir_config.get("enabled", False)):
+        refill_controller = BoundaryReservoirRefill.from_config(
+            solver=solver,
+            projection_kernel=projection_kernel,
+            target_norm=float(config["initializer"]["target_norm"]),
+            config=boundary_reservoir_config,
+        )
+        refill_mode = "boundary"
+    elif bool(refill_config.get("enabled", False)):
         refill_controller = UniformReservoirRefill.from_config(
             solver=solver,
             projection_kernel=projection_kernel,
             target_norm=float(config["initializer"]["target_norm"]),
             config=refill_config,
         )
+        refill_mode = "uniform"
 
     leakage_matrix = build_mode_leakage_matrix(solver.basis, projection_kernel).to(solver.grid.device)
 
@@ -222,6 +237,7 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         "source_inflow": source_inflow_summary,
         "boundary_sponge_enabled": bool(boundary_sponge_config.get("enabled", False)),
         "reservoir_refill_enabled": refill_controller is not None,
+        "reservoir_refill_mode": refill_mode,
         "assumptions": [
             "This is a single-defect source-calibration run, not a two-body gravity test.",
             "The heavy source proxy is created by the chosen relaxed defect norm and confinement, not a separate throat microphysics model.",
@@ -236,6 +252,7 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     plain_language = [
         "Single heavy-source inflow calibration summary:",
         f"- The run completed {completed_evolution_steps} fixed-background steps after source relaxation.",
+        f"- Reservoir mode = {refill_mode}.",
         f"- Mean coherence = {source_inflow_summary['coherence']['mean']:.6f} and mean higher-mode fraction = {source_inflow_summary['higher_mode_fraction']['mean']:.6e}.",
         f"- Maximum relative total-norm drop = {source_inflow_summary['total_norm']['max_rel_drop']:.6e}.",
         f"- Mean shell inflow at r = {shell_radii[best_shell]:.3f} is {mean_shell_inflow[best_shell]:.6e}.",

@@ -1374,3 +1374,38 @@ Scientific intent:
 - this branch does not yet test two-body gravity,
 - it calibrates whether a live heavy defect can act as a stable source/inflow object in the boxed medium,
 - if that source calibration is interpretable, the next branch should add a light defect and test radial infall against the Newtonian `1/r^2` oracle using the same live-source protocol.
+
+### Run 034: first heavy-source calibration result and prepared boundary-reservoir follow-up
+
+Completed first single-heavy-source calibration result:
+
+- output: `outputs/runs/exp01_single_heavy_source_inflow_320_cuda`
+- completed `4096` real-time steps after relaxation
+- mean coherence `= 0.999956`
+- mean higher-mode fraction `= 4.330428e-03`
+- max relative total-norm drop `= 5.438970e-03`
+- mean shell inflow at `r = 6` `= 7.019079e-10`
+
+Interpretation:
+
+- the heavy defect is highly coherent and remains well localized,
+- but the no-refill branch did not yet show a strong sustained sink-like inflow at larger radii,
+- at inner shells the measured mean flux is still outward in the current sign convention, so the branch is not yet calibrated as a convincing live source.
+
+Prepared next A/B branch:
+
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_reservoir_cuda.json`
+- `scripts/run_exp01_single_heavy_source_inflow_320_boundary_reservoir_cuda.sh`
+
+Purpose:
+
+- keep the single-heavy-source calibration setup fixed,
+- replace “no refill” with a boundary-fed reservoir that restores lost norm from the box edges rather than by uniform reinjection,
+- compare the heavy-source inflow profile against the completed no-refill baseline,
+- test the user-motivated reduced closure where ambient density is held fixed enough that source/throat response need not be explicitly modeled yet.
+
+Implementation notes:
+
+- the new operator injects only into the mode-0 field using an edge-localized symmetric shape with exact norm bookkeeping,
+- it reuses the saved relaxed baseline checkpoint if present,
+- the old no-refill branch remains available as the direct control.

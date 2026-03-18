@@ -77,6 +77,12 @@ Single heavy-source inflow calibration on CUDA:
 ./scripts/run_exp01_single_heavy_source_inflow_320_cuda.sh
 ```
 
+Single heavy-source inflow calibration with boundary-fed reservoir refill:
+
+```bash
+./scripts/run_exp01_single_heavy_source_inflow_320_boundary_reservoir_cuda.sh
+```
+
 ODE Newtonian reference:
 
 ```bash
