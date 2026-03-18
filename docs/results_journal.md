@@ -1481,3 +1481,33 @@ Purpose:
 - move the refill support into an interior shell that starts at or beyond the sponge boundary,
 - test whether a quieter reservoir geometry can preserve the positive outer-shell inflow while reducing source puffing and inner-shell outward recirculation,
 - only promote a source branch once the integrated shell flux is cleaner across radius.
+
+### Run 037: interior-shell screen result and prepared narrow follow-up
+
+Completed interior-shell boundary-reservoir screen:
+
+- outputs:
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w2_cap1em5`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w4_cap1em5`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner8_w2_cap1em5`
+  - `outputs/runs/exp01_single_heavy_source_inflow_320_boundary_shell_screen_inner6_w2_cap5em6`
+
+Interpretation:
+
+- moving the feed off the full edge band and into an interior shell reduced source puffing substantially versus the first boundary-reservoir branch,
+- the best branch so far is `inner6_w2_cap5em6`,
+- but the mean shell-flux profile is still mixed across radius, so the source is not yet clean enough to promote to the two-body infall test.
+
+Prepared next refinement:
+
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_refine_inner6_w1p5_cap5em6.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_refine_inner6_w2_cap25em7.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_refine_inner6p5_w2_cap5em6.json`
+- `configs/local/exp01_single_heavy_source_inflow_320_boundary_shell_refine_inner7_w2_cap5em6.json`
+- `scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_refine.sh`
+
+Purpose:
+
+- keep the current best branch as the anchor: `inner_clearance = 6`, `width = 2`, `cap = 5e-6`,
+- test whether the remaining mixed flux profile is most sensitive to shell width, a gentler cap, or a slightly deeper shell placement,
+- only advance once the source branch is cleaner than the current `inner6_w2_cap5em6` control.

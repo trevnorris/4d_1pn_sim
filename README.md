@@ -95,6 +95,12 @@ Interior-shell boundary-reservoir tuning screen for the live heavy-source calibr
 ./scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_screen.sh
 ```
 
+Narrow follow-up around the best interior-shell boundary-reservoir branch:
+
+```bash
+./scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_refine.sh
+```
+
 ODE Newtonian reference:
 
 ```bash

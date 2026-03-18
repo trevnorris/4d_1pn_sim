@@ -27,10 +27,10 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the interior-feed-shell reservoir screen on the single-heavy-source branch:
-  - `./scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_screen.sh`
+- Run the narrow interior-feed-shell follow-up on the single-heavy-source branch:
+  - `./scripts/run_exp01_single_heavy_source_inflow_320_boundary_shell_refine.sh`
 - Compare outer-shell inflow, source compactness, coherence, and total-norm drift across:
-  - feed shells that begin at the sponge edge versus farther inward,
-  - narrow versus wider interior feed-shell widths,
-  - genuinely smaller refill caps.
+  - slightly narrower feed-shell width,
+  - a gentler refill cap just below the current best branch,
+  - feed-shell starts slightly farther inward than the current best branch.
 - Promote the best source calibration branch only after the shell-flux profile is cleaner and source puffing is reduced.
