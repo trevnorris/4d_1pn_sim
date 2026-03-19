@@ -131,6 +131,12 @@ Prefilled-bath source calibration with the embedded defect ramped in during cond
 ./scripts/run_exp01_prefilled_bath_source_ramped_320_boundary_relaxation.sh
 ```
 
+Prefilled-bath source calibration starting from an imaginarily relaxed composite source-in-bath state:
+
+```bash
+./scripts/run_exp01_prefilled_bath_source_relaxed_320_boundary_relaxation.sh
+```
+
 Prefilled-bath operator-isolation screen for the no-defect bath control:
 
 ```bash

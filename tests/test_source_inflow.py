@@ -588,6 +588,104 @@ def test_exp01_single_heavy_source_inflow_bath_plus_gaussian_initializer(tmp_pat
     assert timeseries["shell_inflow_rates"].shape[1] == 2
 
 
+def test_exp01_single_heavy_source_inflow_relaxed_bath_plus_gaussian_initializer(tmp_path) -> None:
+    output_dir = tmp_path / "run_relaxed_bath_plus_defect"
+    bath_density = 2.0 / 12.0**3
+    config = {
+        "run_name": "exp01_single_heavy_source_inflow_relaxed_bath_plus_gaussian_test",
+        "seed": 1234,
+        "device": "cpu",
+        "dtype": "float32",
+        "complex_dtype": "complex64",
+        "output_dir": str(output_dir),
+        "overwrite_output": True,
+        "grid": {
+            "shape": [12, 12, 12],
+            "length": [12.0, 12.0, 12.0],
+        },
+        "hermite": {
+            "num_modes": 2,
+            "lambda_w": 1.25,
+            "quadrature_order": 8,
+        },
+        "eos": {
+            "K_eos": 0.08,
+            "n": 5.0,
+        },
+        "geometry": {
+            "lambda_aspect": 3.0,
+            "reference_rho": 1.0,
+            "reference_a": 1.1,
+            "reference_energy_scale": 1.0,
+        },
+        "solver": {
+            "mass": 1.0,
+            "kinetic_prefactor": 0.5,
+            "transverse_prefactor": 0.2,
+            "trap_strength_r": 0.4,
+            "trap_strength_w": 0.9,
+            "dt": 0.02,
+        },
+        "initializer": {
+            "mode": "bath_plus_gaussian_defect",
+            "imaginary_dt": 0.01,
+            "steps": 4,
+            "apply_imaginary_relaxation": True,
+            "target_norm": 4.0,
+            "bath_density": bath_density,
+            "bath_phase_offset": 0.0,
+            "defect_target_norm": 2.0,
+            "defect_phase_offset": 1.5707963267948966,
+            "gaussian_width": 1.0,
+        },
+        "experiment": {
+            "conditioning_steps": 2,
+            "conditioning_metric_stride": 1,
+            "conditioning_progress_stride": 1,
+            "evolution_steps": 4,
+            "metric_stride": 2,
+            "progress_stride": 2,
+            "shell_radii": [1.5, 2.5],
+            "shell_band_width": 1.0,
+            "core_radius": 1.5,
+            "ambient_probe_radius": 3.0,
+            "report_shell_index": 0,
+        },
+        "boundary_sponge": {
+            "enabled": True,
+            "width": 2.0,
+            "strength": 4.0,
+            "power": 2.0,
+            "preserve_bath_perturbations": True,
+        },
+        "boundary_relaxation": {
+            "enabled": True,
+            "inner_clearance": 1.0,
+            "width": 2.0,
+            "power": 2.0,
+            "target_density": bath_density,
+            "relaxation_fraction": 0.5,
+            "max_delta_norm_fraction_per_step": 5.0e-2,
+        },
+        "reservoir_refill": {
+            "enabled": False,
+        },
+        "checkpoints": {
+            "save_relaxed": False,
+            "save_conditioned": False,
+            "save_final": False,
+        },
+    }
+    config_path = tmp_path / "config_relaxed_bath_plus_defect.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    run(config_path)
+
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["initializer_mode"] == "bath_plus_gaussian_defect"
+    assert summary["embedded_defect_enabled"] is True
+
+
 def test_exp01_single_heavy_source_inflow_uniform_bath_with_embedded_defect_ramp(tmp_path) -> None:
     output_dir = tmp_path / "run_uniform_bath_ramped_defect"
     bath_density = 2.0 / 12.0**3

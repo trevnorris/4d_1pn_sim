@@ -1642,3 +1642,20 @@ Why this branch is next:
 - the bath controls are now clean,
 - the remaining instability is in the source insertion / source-settling path,
 - so the next best lever is a gentler source startup, not more bath tuning.
+
+### Run 043: relaxed composite source-in-bath branch
+
+- Files added or updated:
+  - `tests/test_source_inflow.py`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_boundary_relaxation.json`
+  - `scripts/run_exp01_prefilled_bath_source_relaxed_320_boundary_relaxation.sh`
+
+What changed:
+
+- Added the promoted branch that starts from the full bath-plus-defect composite and imaginary-time relaxes that composite before the real-time conditioning/production window.
+
+Why this branch is next:
+
+- the ramped insertion still radiated hard,
+- which indicates the inserted defect template is not a matched source-in-bath state,
+- so the next better approximation is to relax the composite state first and only then measure inflow.
