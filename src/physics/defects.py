@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import torch
 
 from src.core.fft_ops import fft3, ifft3
@@ -32,6 +34,65 @@ def gaussian_initial_modes(
     )
     psi_modes[0] = torch.exp(-0.5 * radial_squared / (gaussian_width**2)).to(solver.complex_dtype) * phase
     psi_modes = solver.normalize_modes(psi_modes, target_norm)
+    return solver.build_state(psi_modes=psi_modes, time=0.0, step=0, rho_ambient=rho_ambient)
+
+
+def uniform_mode0_initial_modes(
+    solver: MatterSplitStepSolver,
+    bath_density: float,
+    rho_ambient: float,
+    phase_offset: float = 0.0,
+) -> MatterState:
+    if bath_density < 0.0:
+        raise ValueError("bath_density must be non-negative")
+    num_modes = solver.basis.num_modes
+    psi_modes = torch.zeros(
+        (num_modes, *solver.grid.shape),
+        device=solver.grid.device,
+        dtype=solver.complex_dtype,
+    )
+    amplitude = math.sqrt(float(bath_density))
+    phase = torch.exp(
+        1j * torch.as_tensor(float(phase_offset), device=solver.grid.device, dtype=solver.grid.real_dtype)
+    ).to(solver.complex_dtype)
+    psi_modes[0] = torch.full(
+        solver.grid.shape,
+        fill_value=amplitude,
+        device=solver.grid.device,
+        dtype=solver.complex_dtype,
+    ) * phase
+    return solver.build_state(psi_modes=psi_modes, time=0.0, step=0, rho_ambient=rho_ambient)
+
+
+def bath_plus_gaussian_initial_modes(
+    solver: MatterSplitStepSolver,
+    bath_density: float,
+    defect_target_norm: float,
+    gaussian_width: float,
+    rho_ambient: float,
+    center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    momentum: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    bath_phase_offset: float = 0.0,
+    defect_phase_offset: float = 0.5 * math.pi,
+) -> MatterState:
+    bath_state = uniform_mode0_initial_modes(
+        solver=solver,
+        bath_density=bath_density,
+        rho_ambient=rho_ambient,
+        phase_offset=bath_phase_offset,
+    )
+    defect_state = gaussian_initial_modes(
+        solver=solver,
+        gaussian_width=gaussian_width,
+        target_norm=defect_target_norm,
+        rho_ambient=rho_ambient,
+        center=center,
+        momentum=momentum,
+    )
+    phase = torch.exp(
+        1j * torch.as_tensor(float(defect_phase_offset), device=solver.grid.device, dtype=solver.grid.real_dtype)
+    ).to(solver.complex_dtype)
+    psi_modes = bath_state.psi_modes + defect_state.psi_modes * phase
     return solver.build_state(psi_modes=psi_modes, time=0.0, step=0, rho_ambient=rho_ambient)
 
 

@@ -101,6 +101,14 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     solver, projection_kernel = build_solver(config)
     rho0 = float(config["geometry"]["reference_rho"])
     dt = float(config["solver"]["dt"])
+    initializer_config = dict(config["initializer"])
+    initializer_mode = str(initializer_config.get("mode", "gaussian_defect"))
+    prefilled_bath_density = (
+        float(initializer_config["bath_density"])
+        if "bath_density" in initializer_config
+        else None
+    )
+    embedded_defect_enabled = initializer_mode in {"gaussian_defect", "bath_plus_gaussian_defect"}
     experiment_config = dict(config["experiment"])
     conditioning_steps = max(0, int(experiment_config.get("conditioning_steps", 0)))
     evolution_steps = int(experiment_config["evolution_steps"])
@@ -393,6 +401,9 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     completed_evolution_steps = evolution_steps
     summary = {
         "run_name": config["run_name"],
+        "initializer_mode": initializer_mode,
+        "embedded_defect_enabled": bool(embedded_defect_enabled),
+        "prefilled_bath_density": prefilled_bath_density,
         "conditioning_steps": int(conditioning_steps),
         "conditioning_completed_steps": int(conditioning_steps),
         "conditioning_ramp_refill": bool(
@@ -412,8 +423,16 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         "reservoir_refill_enabled": refill_controller is not None,
         "reservoir_refill_mode": refill_mode,
         "assumptions": [
-            "This is a single-defect source-calibration run, not a two-body gravity test.",
-            "The heavy source proxy is created by the chosen relaxed defect norm and confinement, not a separate throat microphysics model.",
+            (
+                "This is a single-defect source-calibration run, not a two-body gravity test."
+                if embedded_defect_enabled
+                else "This is a prefilled-bath boundary-control run with no embedded defect."
+            ),
+            (
+                "The heavy source proxy is created by the chosen relaxed defect norm and confinement, not a separate throat microphysics model."
+                if embedded_defect_enabled
+                else "Any measured shell flux should stay near zero; persistent flow in this run would implicate the bath/boundary protocol rather than source physics."
+            ),
             "Shell inflow rates are estimated from a mode-summed 3D current on thin spherical bands rather than a full 4D control-volume flux.",
             "Ambient density locking is only represented if the optional refill controller is enabled and does not by itself validate momentum neutrality.",
         ],
@@ -424,13 +443,27 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     best_shell = report_shell_index
     plain_language = [
         "Single heavy-source inflow calibration summary:",
-        f"- The run completed {conditioning_steps} conditioning steps and {completed_evolution_steps} measured fixed-background steps after source relaxation.",
+        f"- Initializer mode = {initializer_mode}.",
+        (
+            f"- The run completed {conditioning_steps} conditioning steps and {completed_evolution_steps} measured fixed-background steps after source relaxation."
+            if embedded_defect_enabled
+            else f"- The run completed {conditioning_steps} conditioning steps and {completed_evolution_steps} measured fixed-background steps from a prefilled bath state."
+        ),
         f"- Reservoir mode = {refill_mode}.",
+        (
+            f"- Prefilled bath density = {prefilled_bath_density:.6e}."
+            if prefilled_bath_density is not None
+            else "- No prefilled bath was used."
+        ),
         f"- Mean coherence = {source_inflow_summary['coherence']['mean']:.6f} and mean higher-mode fraction = {source_inflow_summary['higher_mode_fraction']['mean']:.6e}.",
         f"- Maximum relative total-norm drop = {source_inflow_summary['total_norm']['max_rel_drop']:.6e}.",
         f"- Mean shell inflow at r = {shell_radii[best_shell]:.3f} is {mean_shell_inflow[best_shell]:.6e}.",
         f"- Final ambient mean density outside r >= {ambient_probe_radius:.3f} is {source_inflow_summary['ambient_mean_density']['final']:.6e}.",
-        "- This run calibrates whether a single live heavy defect settles into a stable inflow/source state before introducing a second body.",
+        (
+            "- This run calibrates whether a single live heavy defect in the chosen bath protocol settles into a stable inflow/source state before introducing a second body."
+            if embedded_defect_enabled
+            else "- This run checks whether the prefilled bath and boundary protocol can stay quiet before introducing a defect."
+        ),
     ]
     (output_dir / "plain_language_summary.txt").write_text("\n".join(plain_language) + "\n", encoding="utf-8")
     (output_dir / "unresolved_assumptions.txt").write_text("\n".join(summary["assumptions"]) + "\n", encoding="utf-8")

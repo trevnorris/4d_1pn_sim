@@ -9,7 +9,12 @@ from src.core.checkpoints import load_checkpoint
 from src.core.grids import SpatialGrid3D, resolve_device
 from src.core.hermite import HermiteBasis
 from src.core.projection import ProjectionKernel
-from src.physics.defects import gaussian_initial_modes, imaginary_time_relax
+from src.physics.defects import (
+    bath_plus_gaussian_initial_modes,
+    gaussian_initial_modes,
+    imaginary_time_relax,
+    uniform_mode0_initial_modes,
+)
 from src.physics.eos import PolytropicEOS
 from src.physics.geometry import AdiabaticGeometryClosure
 from src.physics.matter_gnls import MatterSplitStepSolver, MatterState
@@ -107,16 +112,50 @@ def prepare_relaxed_state(
     config: dict[str, Any],
     rho_ambient: float,
 ) -> MatterState:
-    state = gaussian_initial_modes(
-        solver=solver,
-        gaussian_width=float(config["initializer"]["gaussian_width"]),
-        target_norm=float(config["initializer"]["target_norm"]),
-        rho_ambient=rho_ambient,
-    )
+    initializer = dict(config["initializer"])
+    mode = str(initializer.get("mode", "gaussian_defect"))
+
+    if mode == "gaussian_defect":
+        state = gaussian_initial_modes(
+            solver=solver,
+            gaussian_width=float(initializer["gaussian_width"]),
+            target_norm=float(initializer["target_norm"]),
+            rho_ambient=rho_ambient,
+            center=tuple(float(v) for v in initializer.get("center", (0.0, 0.0, 0.0))),
+            momentum=tuple(float(v) for v in initializer.get("momentum", (0.0, 0.0, 0.0))),
+        )
+        relax_enabled = bool(initializer.get("apply_imaginary_relaxation", True))
+    elif mode == "uniform_bath":
+        state = uniform_mode0_initial_modes(
+            solver=solver,
+            bath_density=float(initializer["bath_density"]),
+            rho_ambient=rho_ambient,
+            phase_offset=float(initializer.get("bath_phase_offset", 0.0)),
+        )
+        relax_enabled = bool(initializer.get("apply_imaginary_relaxation", False))
+    elif mode == "bath_plus_gaussian_defect":
+        state = bath_plus_gaussian_initial_modes(
+            solver=solver,
+            bath_density=float(initializer["bath_density"]),
+            defect_target_norm=float(initializer.get("defect_target_norm", initializer["target_norm"])),
+            gaussian_width=float(initializer["gaussian_width"]),
+            rho_ambient=rho_ambient,
+            center=tuple(float(v) for v in initializer.get("center", (0.0, 0.0, 0.0))),
+            momentum=tuple(float(v) for v in initializer.get("momentum", (0.0, 0.0, 0.0))),
+            bath_phase_offset=float(initializer.get("bath_phase_offset", 0.0)),
+            defect_phase_offset=float(initializer.get("defect_phase_offset", 0.5 * 3.141592653589793)),
+        )
+        relax_enabled = bool(initializer.get("apply_imaginary_relaxation", False))
+    else:
+        raise ValueError(f"unsupported initializer mode: {mode}")
+
+    relax_steps = int(initializer.get("steps", 0))
+    if not relax_enabled or relax_steps <= 0:
+        return state
     return imaginary_time_relax(
         solver=solver,
         state=state,
-        dtau=float(config["initializer"]["imaginary_dt"]),
-        steps=int(config["initializer"]["steps"]),
-        target_norm=float(config["initializer"]["target_norm"]),
+        dtau=float(initializer["imaginary_dt"]),
+        steps=relax_steps,
+        target_norm=float(initializer["target_norm"]),
     )

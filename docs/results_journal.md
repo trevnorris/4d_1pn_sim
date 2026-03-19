@@ -258,6 +258,7 @@ Key results:
 
 - configured point-tracer background:
   - `beta_eff = -0.001847`
+
   - `Delta phi = -0.000026`
 - pure Kepler control:
   - `beta_eff = -0.001847`
@@ -1567,3 +1568,31 @@ Purpose:
 - keep the conditioning stage,
 - use stronger conditioning relaxation and weaker production relaxation,
 - test whether a bath-like boundary treatment converges more cleanly than the old coherent shell-source refill.
+
+### Run 040: prefilled-bath reset for live-source calibration
+
+- Files added or updated:
+  - `src/physics/defects.py`
+  - `src/experiments/common.py`
+  - `src/experiments/exp01_single_heavy_source_inflow.py`
+  - `tests/test_source_inflow.py`
+  - `configs/local/exp01_prefilled_bath_control_320_boundary_relaxation.json`
+  - `configs/local/exp01_prefilled_bath_source_320_boundary_relaxation.json`
+  - `scripts/run_exp01_prefilled_bath_control_320_boundary_relaxation.sh`
+  - `scripts/run_exp01_prefilled_bath_source_320_boundary_relaxation.sh`
+
+What changed:
+
+- Added real prefilled initializers instead of only the old localized-Gaussian startup:
+  - `uniform_bath`
+  - `bath_plus_gaussian_defect`
+- `exp01_single_heavy_source_inflow` now records which initializer mode was used and distinguishes bath-control runs from embedded-defect source runs in its summary text.
+- Added two new `320^3` CUDA wrappers:
+  - prefilled bath with no defect as the boundary-protocol control
+  - prefilled bath plus embedded centered defect as the next source-calibration branch
+
+Why this reset was needed:
+
+- The previous live-source runs were still asking the box to build the bath after startup.
+- That made it difficult to separate source physics from fill-from-vacuum slosh.
+- The new baseline starts from the intended ambient state directly, which is the cleaner test of whether the boundary protocol is stable and whether a source can settle inside that bath.

@@ -27,11 +27,15 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Run the conditioned long confirmation using the boundary-relaxation collar redesign:
-  - `./scripts/run_exp01_single_heavy_source_inflow_320_boundary_relaxation_conditioned_long.sh`
-- The run should:
-  - load the relaxed heavy-source checkpoint,
-  - spend `4096` unmeasured steps conditioning under sponge + boundary relaxation,
-  - use stronger conditioning refill and quieter production refill,
-  - then measure `12288` production steps from the conditioned state.
-- Promote the source branch only if the outer-shell flux stays inward after conditioning rather than falling back into mixed-sign production behavior.
+- Reset the source-sector baseline around a prefilled bath rather than asking the box to fill itself from near-vacuum:
+  - `./scripts/run_exp01_prefilled_bath_control_320_boundary_relaxation.sh`
+  - `./scripts/run_exp01_prefilled_bath_source_320_boundary_relaxation.sh`
+- The control run should:
+  - start from a uniform mode-0 bath at the target ambient density,
+  - include no embedded defect and no confinement trap,
+  - verify that shell inflow stays near zero under the boundary protocol.
+- The source run should:
+  - start from the same prefilled bath,
+  - embed the centered defect directly into that bath,
+  - then use conditioning plus boundary relaxation before measuring production inflow.
+- Promote the live-source path only if the bath control stays quiet and the embedded-defect branch settles into inward outer-shell flow without the old fill-from-vacuum transients.
