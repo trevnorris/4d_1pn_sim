@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +12,7 @@ from src.core.config import load_json_config
 from src.core.io import collect_runtime_info, dump_json, ensure_dir
 from src.experiments.common import build_solver, prepare_relaxed_state, state_from_checkpoint
 from src.physics.boundary_sponge import BoundarySponge, build_boundary_sponge_mask
-from src.physics.defects import uniform_mode0_initial_modes
+from src.physics.defects import gaussian_initial_modes, uniform_mode0_initial_modes
 from src.physics.open_system import (
     BoundaryDensityRelaxation,
     BoundaryReservoirRefill,
@@ -109,7 +110,9 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         if "bath_density" in initializer_config
         else None
     )
-    embedded_defect_enabled = initializer_mode in {"gaussian_defect", "bath_plus_gaussian_defect"}
+    embedded_defect_config = dict(config.get("embedded_defect", {}))
+    ramped_embedded_defect_enabled = bool(embedded_defect_config.get("enabled", False))
+    embedded_defect_enabled = ramped_embedded_defect_enabled or initializer_mode in {"gaussian_defect", "bath_plus_gaussian_defect"}
     experiment_config = dict(config["experiment"])
     conditioning_steps = max(0, int(experiment_config.get("conditioning_steps", 0)))
     evolution_steps = int(experiment_config["evolution_steps"])
@@ -221,10 +224,45 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     conditioning_history = _empty_source_history()
     production_history = _empty_source_history()
 
+    embedded_defect_template = None
+    embedded_defect_fraction = 0.0
+    embedded_defect_ramp_steps = 0
+    if ramped_embedded_defect_enabled:
+        if initializer_mode != "uniform_bath":
+            raise ValueError("embedded_defect ramp requires initializer.mode = 'uniform_bath'")
+        defect_state = gaussian_initial_modes(
+            solver=solver,
+            gaussian_width=float(embedded_defect_config["gaussian_width"]),
+            target_norm=float(embedded_defect_config["target_norm"]),
+            rho_ambient=rho0,
+            center=tuple(float(v) for v in embedded_defect_config.get("center", (0.0, 0.0, 0.0))),
+            momentum=tuple(float(v) for v in embedded_defect_config.get("momentum", (0.0, 0.0, 0.0))),
+        )
+        phase_offset = float(embedded_defect_config.get("phase_offset", 0.5 * math.pi))
+        phase = torch.exp(
+            1j * torch.as_tensor(phase_offset, device=solver.grid.device, dtype=solver.grid.real_dtype)
+        ).to(solver.complex_dtype)
+        embedded_defect_template = defect_state.psi_modes * phase
+        embedded_defect_ramp_steps = max(
+            1,
+            int(np.ceil(conditioning_steps * float(embedded_defect_config.get("ramp_fraction", 0.5)))),
+        )
+
     if conditioning_steps > 0:
         print(f"[exp01-heavy] stage=condition start steps={conditioning_steps}")
         ramp_steps = max(1, int(np.ceil(conditioning_steps * conditioning_ramp_fraction)))
         for idx in range(conditioning_steps):
+            if embedded_defect_template is not None and embedded_defect_fraction < 1.0:
+                target_fraction = min(float(idx + 1) / float(embedded_defect_ramp_steps), 1.0)
+                delta_fraction = max(0.0, target_fraction - embedded_defect_fraction)
+                if delta_fraction > 0.0:
+                    state = solver.build_state(
+                        psi_modes=state.psi_modes + delta_fraction * embedded_defect_template,
+                        time=float(state.time),
+                        step=int(state.step),
+                        rho_ambient=float(state.rho_ambient),
+                    )
+                    embedded_defect_fraction = target_fraction
             state = solver.step(
                 state,
                 dt=dt,
@@ -421,6 +459,10 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
         "prefilled_bath_density": prefilled_bath_density,
         "conditioning_steps": int(conditioning_steps),
         "conditioning_completed_steps": int(conditioning_steps),
+        "embedded_defect_ramp_enabled": bool(ramped_embedded_defect_enabled),
+        "embedded_defect_ramp_fraction": (
+            float(embedded_defect_config.get("ramp_fraction", 0.5)) if ramped_embedded_defect_enabled else None
+        ),
         "conditioning_ramp_refill": bool(
             conditioning_ramp_refill
             and refill_controller is not None

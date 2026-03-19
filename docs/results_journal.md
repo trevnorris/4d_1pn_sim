@@ -1623,3 +1623,22 @@ Promotion rule:
 Follow-up implementation note:
 
 - the sponge-enabled prefilled-bath branches now use a bath-preserving sponge that damps deviations from the uniform bath in the collar instead of damping the bath itself.
+
+### Run 042: ramped embedded-defect source branch
+
+- Files added or updated:
+  - `src/experiments/exp01_single_heavy_source_inflow.py`
+  - `tests/test_source_inflow.py`
+  - `configs/local/exp01_prefilled_bath_source_ramped_320_boundary_relaxation.json`
+  - `scripts/run_exp01_prefilled_bath_source_ramped_320_boundary_relaxation.sh`
+
+What changed:
+
+- Added an optional embedded-defect ramp during conditioning for `exp01`.
+- The promoted prefilled-bath source branch now starts from the stable uniform bath, adds the centered defect gradually over the first half of conditioning, and only then begins the measured production window.
+
+Why this branch is next:
+
+- the bath controls are now clean,
+- the remaining instability is in the source insertion / source-settling path,
+- so the next best lever is a gentler source startup, not more bath tuning.

@@ -125,6 +125,12 @@ Prefilled-bath source calibration with an embedded centered defect:
 ./scripts/run_exp01_prefilled_bath_source_320_boundary_relaxation.sh
 ```
 
+Prefilled-bath source calibration with the embedded defect ramped in during conditioning:
+
+```bash
+./scripts/run_exp01_prefilled_bath_source_ramped_320_boundary_relaxation.sh
+```
+
 Prefilled-bath operator-isolation screen for the no-defect bath control:
 
 ```bash
