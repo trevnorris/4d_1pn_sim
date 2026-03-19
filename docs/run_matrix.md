@@ -34,6 +34,7 @@ This file tracks the experiment ladder status at a glance.
   - sponge only
   - boundary relaxation only
   - sponge + boundary relaxation
+- The sponge-enabled prefilled-bath cases now use a bath-preserving sponge that damps perturbations relative to the uniform bath instead of damping the bath itself.
 - The next branch should only be promoted after the no-defect bath stays near zero shell flux without building artificial structure in the center.
 - The embedded-defect prefilled-bath source branch remains the follow-on, not the immediate next run:
   - `./scripts/run_exp01_prefilled_bath_source_320_boundary_relaxation.sh`

@@ -131,6 +131,8 @@ Prefilled-bath operator-isolation screen for the no-defect bath control:
 ./scripts/run_exp01_prefilled_bath_control_320_operator_screen.sh
 ```
 
+The sponge-enabled prefilled-bath controls now use a bath-preserving sponge that damps deviations from the uniform bath in the boundary collar instead of multiplying the bath itself down.
+
 ODE Newtonian reference:
 
 ```bash

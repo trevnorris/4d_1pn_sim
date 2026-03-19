@@ -60,7 +60,8 @@
     "enabled": true,
     "width": 6.0,
     "strength": 1.0,
-    "power": 2.0
+    "power": 2.0,
+    "preserve_bath_perturbations": true
   },
   "boundary_relaxation": {
     "enabled": true,

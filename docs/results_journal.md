@@ -1619,3 +1619,7 @@ Purpose:
 Promotion rule:
 
 - do not return to the embedded-defect source branch until one of these no-defect controls stays near zero shell flux without building a spurious central concentration.
+
+Follow-up implementation note:
+
+- the sponge-enabled prefilled-bath branches now use a bath-preserving sponge that damps deviations from the uniform bath in the collar instead of damping the bath itself.

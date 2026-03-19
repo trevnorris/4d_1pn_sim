@@ -10,7 +10,8 @@ from src.core.checkpoints import save_checkpoint
 from src.core.config import load_json_config
 from src.core.io import collect_runtime_info, dump_json, ensure_dir
 from src.experiments.common import build_solver, prepare_relaxed_state, state_from_checkpoint
-from src.physics.boundary_sponge import build_boundary_sponge_mask
+from src.physics.boundary_sponge import BoundarySponge, build_boundary_sponge_mask
+from src.physics.defects import uniform_mode0_initial_modes
 from src.physics.open_system import (
     BoundaryDensityRelaxation,
     BoundaryReservoirRefill,
@@ -138,11 +139,25 @@ def run(config_path: str | Path, restart_relaxed: str | None = None) -> Path:
     boundary_sponge_config = dict(config.get("boundary_sponge", {}))
     node_amplitude_mask = None
     if bool(boundary_sponge_config.get("enabled", False)):
-        node_amplitude_mask = build_boundary_sponge_mask(
+        sponge_mask = build_boundary_sponge_mask(
             grid=solver.grid,
             dt=dt,
             config=boundary_sponge_config,
         )
+        preserve_bath_perturbations = bool(boundary_sponge_config.get("preserve_bath_perturbations", False))
+        if preserve_bath_perturbations and prefilled_bath_density is not None:
+            bath_reference_state = uniform_mode0_initial_modes(
+                solver=solver,
+                bath_density=prefilled_bath_density,
+                rho_ambient=rho0,
+                phase_offset=float(initializer_config.get("bath_phase_offset", 0.0)),
+            )
+            node_amplitude_mask = BoundarySponge(
+                mask=sponge_mask,
+                target_nodes=solver.reconstruct_nodes(bath_reference_state.psi_modes),
+            )
+        else:
+            node_amplitude_mask = sponge_mask
 
     refill_config = dict(config.get("reservoir_refill", {}))
     boundary_reservoir_config = dict(config.get("boundary_reservoir", {}))

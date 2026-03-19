@@ -20,6 +20,7 @@ from src.physics.open_system import (
     projected_leakage_source_from_modes,
     relax_boundary_density_to_target,
 )
+from src.physics.boundary_sponge import BoundarySponge, apply_boundary_sponge_to_nodes
 
 
 def _build_solver() -> MatterSplitStepSolver:
@@ -270,3 +271,18 @@ def test_boundary_sponge_mask_damps_edges_more_than_center() -> None:
 
     assert abs(center_value - 1.0) < 1.0e-12
     assert edge_value < center_value
+
+
+def test_bath_preserving_sponge_leaves_target_state_invariant() -> None:
+    solver = _build_solver()
+    psi_nodes = torch.ones((solver.basis.num_modes, *solver.grid.shape), dtype=torch.complex128)
+    mask = build_boundary_sponge_mask(
+        grid=solver.grid,
+        dt=0.015,
+        config={"enabled": True, "width": 2.0, "strength": 8.0, "power": 2.0},
+    )
+    sponge = BoundarySponge(mask=mask, target_nodes=psi_nodes.clone())
+
+    updated = apply_boundary_sponge_to_nodes(psi_nodes, sponge)
+
+    assert torch.allclose(updated, psi_nodes, atol=1.0e-12, rtol=1.0e-12)

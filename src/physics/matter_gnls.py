@@ -8,6 +8,7 @@ import torch
 from src.core.fft_ops import fft3, ifft3
 from src.core.grids import SpatialGrid3D
 from src.core.hermite import HermiteBasis
+from src.physics.boundary_sponge import apply_boundary_sponge_to_nodes
 from src.physics.eos import PolytropicEOS
 from src.physics.geometry import AdiabaticGeometryClosure
 
@@ -164,10 +165,7 @@ class MatterSplitStepSolver:
         psi_nodes: torch.Tensor,
         node_amplitude_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if node_amplitude_mask is not None:
-            mask = node_amplitude_mask.unsqueeze(0) if node_amplitude_mask.ndim == 3 else node_amplitude_mask
-            psi_nodes = psi_nodes * mask.to(psi_nodes.dtype)
-        return psi_nodes
+        return apply_boundary_sponge_to_nodes(psi_nodes, node_amplitude_mask)
 
     def step_components(
         self,

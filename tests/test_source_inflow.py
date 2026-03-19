@@ -452,7 +452,11 @@ def test_exp01_single_heavy_source_inflow_uniform_bath_initializer(tmp_path) -> 
             "report_shell_index": 0,
         },
         "boundary_sponge": {
-            "enabled": False,
+            "enabled": True,
+            "width": 2.0,
+            "strength": 4.0,
+            "power": 2.0,
+            "preserve_bath_perturbations": True,
         },
         "boundary_relaxation": {
             "enabled": True,
