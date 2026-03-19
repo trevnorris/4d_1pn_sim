@@ -1659,3 +1659,22 @@ Why this branch is next:
 - the ramped insertion still radiated hard,
 - which indicates the inserted defect template is not a matched source-in-bath state,
 - so the next better approximation is to relax the composite state first and only then measure inflow.
+
+### Run 044: relaxed-source production-refill screen
+
+- Files added or updated:
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_refill_screen_p075.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_refill_screen_p100.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_refill_screen_p125.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_refill_screen_p150.json`
+  - `scripts/run_exp01_prefilled_bath_source_relaxed_320_refill_screen.sh`
+
+What changed:
+
+- Added a focused 4-case screen that holds the successful relaxed composite source-in-bath branch fixed and only raises `production_refill_scale` above the baseline `0.5` value.
+
+Why this branch is next:
+
+- the relaxed composite run was the first source branch with near-perfect coherence and small shell-flux amplitudes,
+- but it remained refill-cap-limited through the entire production window,
+- so the next isolated diagnostic is whether a modest production refill increase cleans up the outer-shell inflow without breaking source integrity.

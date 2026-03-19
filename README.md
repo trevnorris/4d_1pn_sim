@@ -137,6 +137,12 @@ Prefilled-bath source calibration starting from an imaginarily relaxed composite
 ./scripts/run_exp01_prefilled_bath_source_relaxed_320_boundary_relaxation.sh
 ```
 
+Focused production-refill sweep on the relaxed composite source-in-bath branch:
+
+```bash
+./scripts/run_exp01_prefilled_bath_source_relaxed_320_refill_screen.sh
+```
+
 Prefilled-bath operator-isolation screen for the no-defect bath control:
 
 ```bash

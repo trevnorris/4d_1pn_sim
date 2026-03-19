@@ -44,3 +44,6 @@ This file tracks the experiment ladder status at a glance.
   - build the full bath-plus-defect composite at `t=0`,
   - imaginary-time relax that composite before real-time evolution,
   - then apply the same conditioning and production protocol to the already matched source-in-bath state.
+- The next isolated lever after that relaxed-source control is production refill strength:
+  - `./scripts/run_exp01_prefilled_bath_source_relaxed_320_refill_screen.sh`
+- This screen keeps the bath, source initialization, sponge, and boundary-relaxation geometry fixed and only raises `production_refill_scale` above the successful `0.5` baseline.
