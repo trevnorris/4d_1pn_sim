@@ -1,0 +1,89 @@
+{
+  "run_name": "exp01_prefilled_bath_control_320_sponge_only",
+  "seed": 1234,
+  "device": "cuda",
+  "dtype": "float32",
+  "complex_dtype": "complex64",
+  "output_dir": "outputs/runs/exp01_prefilled_bath_control_320_sponge_only",
+  "overwrite_output": true,
+  "grid": {
+    "shape": [320, 320, 320],
+    "length": [60.0, 60.0, 60.0]
+  },
+  "hermite": {
+    "num_modes": 4,
+    "lambda_w": 1.25,
+    "quadrature_order": 20
+  },
+  "eos": {
+    "K_eos": 0.08,
+    "n": 5.0
+  },
+  "geometry": {
+    "lambda_aspect": 3.0,
+    "reference_rho": 1.0,
+    "reference_a": 1.1,
+    "reference_energy_scale": 1.0
+  },
+  "solver": {
+    "mass": 1.0,
+    "kinetic_prefactor": 0.5,
+    "transverse_prefactor": 0.2,
+    "trap_strength_r": 0.0,
+    "trap_strength_w": 0.0,
+    "dt": 0.015
+  },
+  "initializer": {
+    "mode": "uniform_bath",
+    "imaginary_dt": 0.006,
+    "steps": 0,
+    "apply_imaginary_relaxation": false,
+    "target_norm": 6.0,
+    "bath_density": 2.7777777777777776e-05,
+    "bath_phase_offset": 0.0,
+    "gaussian_width": 1.1
+  },
+  "experiment": {
+    "conditioning_steps": 4096,
+    "conditioning_metric_stride": 64,
+    "conditioning_progress_stride": 512,
+    "conditioning_ramp_refill": true,
+    "conditioning_ramp_fraction": 0.5,
+    "conditioning_refill_scale": 2.0,
+    "production_refill_scale": 0.5,
+    "evolution_steps": 8192,
+    "metric_stride": 64,
+    "progress_stride": 512,
+    "shell_radii": [1.5, 2.5, 4.0, 6.0, 8.0, 12.0],
+    "shell_band_width": 0.375,
+    "core_radius": 2.0,
+    "ambient_probe_radius": 12.0,
+    "report_shell_index": 3
+  },
+  "boundary_sponge": {
+    "enabled": true,
+    "width": 6.0,
+    "strength": 1.0,
+    "power": 2.0
+  },
+  "boundary_relaxation": {
+    "enabled": false,
+    "width": 6.0,
+    "power": 2.0,
+    "inner_clearance": 0.0,
+    "target_density": 2.7777777777777776e-05,
+    "relaxation_fraction": 0.25,
+    "max_delta_norm_fraction_per_step": 5.0e-05
+  },
+  "boundary_reservoir": {
+    "enabled": false
+  },
+  "reservoir_refill": {
+    "enabled": false
+  },
+  "checkpoints": {
+    "save_relaxed": false,
+    "save_conditioned": false,
+    "save_final": false
+  }
+}

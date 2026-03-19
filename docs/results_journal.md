@@ -1596,3 +1596,26 @@ Why this reset was needed:
 - The previous live-source runs were still asking the box to build the bath after startup.
 - That made it difficult to separate source physics from fill-from-vacuum slosh.
 - The new baseline starts from the intended ambient state directly, which is the cleaner test of whether the boundary protocol is stable and whether a source can settle inside that bath.
+
+### Run 041: prefilled-bath operator-isolation screen
+
+- Files added:
+  - `configs/local/exp01_prefilled_bath_control_320_bare.json`
+  - `configs/local/exp01_prefilled_bath_control_320_sponge_only.json`
+  - `configs/local/exp01_prefilled_bath_control_320_boundary_relaxation_only.json`
+  - `configs/local/exp01_prefilled_bath_control_320_sponge_boundary_relaxation.json`
+  - `scripts/run_exp01_prefilled_bath_control_320_operator_screen.sh`
+
+Purpose:
+
+- keep the same prefilled bath and no-defect control state,
+- isolate which bath operator is exciting the box,
+- compare:
+  - bare bath,
+  - sponge only,
+  - boundary relaxation only,
+  - sponge plus boundary relaxation.
+
+Promotion rule:
+
+- do not return to the embedded-defect source branch until one of these no-defect controls stays near zero shell flux without building a spurious central concentration.

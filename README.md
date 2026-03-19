@@ -125,6 +125,12 @@ Prefilled-bath source calibration with an embedded centered defect:
 ./scripts/run_exp01_prefilled_bath_source_320_boundary_relaxation.sh
 ```
 
+Prefilled-bath operator-isolation screen for the no-defect bath control:
+
+```bash
+./scripts/run_exp01_prefilled_bath_control_320_operator_screen.sh
+```
+
 ODE Newtonian reference:
 
 ```bash

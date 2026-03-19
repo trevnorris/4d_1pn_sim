@@ -27,15 +27,13 @@ This file tracks the experiment ladder status at a glance.
 
 ## Immediate next step
 
-- Reset the source-sector baseline around a prefilled bath rather than asking the box to fill itself from near-vacuum:
-  - `./scripts/run_exp01_prefilled_bath_control_320_boundary_relaxation.sh`
+- First isolate which bath operator is exciting the prefilled box:
+  - `./scripts/run_exp01_prefilled_bath_control_320_operator_screen.sh`
+- The four no-defect controls are:
+  - bare prefilled bath
+  - sponge only
+  - boundary relaxation only
+  - sponge + boundary relaxation
+- The next branch should only be promoted after the no-defect bath stays near zero shell flux without building artificial structure in the center.
+- The embedded-defect prefilled-bath source branch remains the follow-on, not the immediate next run:
   - `./scripts/run_exp01_prefilled_bath_source_320_boundary_relaxation.sh`
-- The control run should:
-  - start from a uniform mode-0 bath at the target ambient density,
-  - include no embedded defect and no confinement trap,
-  - verify that shell inflow stays near zero under the boundary protocol.
-- The source run should:
-  - start from the same prefilled bath,
-  - embed the centered defect directly into that bath,
-  - then use conditioning plus boundary relaxation before measuring production inflow.
-- Promote the live-source path only if the bath control stays quiet and the embedded-defect branch settles into inward outer-shell flow without the old fill-from-vacuum transients.
