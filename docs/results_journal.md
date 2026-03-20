@@ -1678,3 +1678,22 @@ Why this branch is next:
 - the relaxed composite run was the first source branch with near-perfect coherence and small shell-flux amplitudes,
 - but it remained refill-cap-limited through the entire production window,
 - so the next isolated diagnostic is whether a modest production refill increase cleans up the outer-shell inflow without breaking source integrity.
+
+### Run 045: relaxed-source compactness screen
+
+- Files added or updated:
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_compactness_screen_d050.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_compactness_screen_d055.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_compactness_screen_d065.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_compactness_screen_d070.json`
+  - `scripts/run_exp01_prefilled_bath_source_relaxed_320_compactness_screen.sh`
+
+What changed:
+
+- Added a focused 4-case screen that promotes `production_refill_scale = 0.75` as the current control and varies only `initializer.defect_target_norm` to test source compactness/strength.
+
+Why this branch is next:
+
+- the refill sweep improved bath retention but did not clean up the slight outward bias at the outer shells,
+- and higher-mode content increased as refill got stronger,
+- so the next isolated lever is the source itself rather than more bath tuning.

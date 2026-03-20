@@ -143,6 +143,12 @@ Focused production-refill sweep on the relaxed composite source-in-bath branch:
 ./scripts/run_exp01_prefilled_bath_source_relaxed_320_refill_screen.sh
 ```
 
+Focused source-compactness sweep on the promoted relaxed-source `production_refill_scale = 0.75` control:
+
+```bash
+./scripts/run_exp01_prefilled_bath_source_relaxed_320_compactness_screen.sh
+```
+
 Prefilled-bath operator-isolation screen for the no-defect bath control:
 
 ```bash

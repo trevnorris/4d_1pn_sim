@@ -47,3 +47,6 @@ This file tracks the experiment ladder status at a glance.
 - The next isolated lever after that relaxed-source control is production refill strength:
   - `./scripts/run_exp01_prefilled_bath_source_relaxed_320_refill_screen.sh`
 - This screen keeps the bath, source initialization, sponge, and boundary-relaxation geometry fixed and only raises `production_refill_scale` above the successful `0.5` baseline.
+- The promoted follow-on after that refill screen is a source-compactness screen at the chosen `production_refill_scale = 0.75` control:
+  - `./scripts/run_exp01_prefilled_bath_source_relaxed_320_compactness_screen.sh`
+- This screen keeps the bath and boundary protocol fixed and varies only `initializer.defect_target_norm` around the `6.0` baseline to test whether a more compact or weaker source cleans up the outer-shell inflow.
