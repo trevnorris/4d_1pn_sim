@@ -1697,3 +1697,22 @@ Why this branch is next:
 - the refill sweep improved bath retention but did not clean up the slight outward bias at the outer shells,
 - and higher-mode content increased as refill got stronger,
 - so the next isolated lever is the source itself rather than more bath tuning.
+
+### Run 046: relaxed-source radial-trap screen
+
+- Files added or updated:
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_trap_screen_r030.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_trap_screen_r035.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_trap_screen_r045.json`
+  - `configs/local/exp01_prefilled_bath_source_relaxed_320_trap_screen_r050.json`
+  - `scripts/run_exp01_prefilled_bath_source_relaxed_320_trap_screen.sh`
+
+What changed:
+
+- Added a focused 4-case screen that keeps the promoted `production_refill_scale = 0.75` control fixed and varies only `solver.trap_strength_r` to test whether radial confinement is the active equilibrium-shape lever.
+
+Why this branch is next:
+
+- the compactness screen was effectively flat after relaxation,
+- which indicates `initializer.defect_target_norm` is largely washed out by the relaxed composite setup,
+- so the next better candidate is the confinement parameter that should survive relaxation and change the equilibrium source shape directly.
